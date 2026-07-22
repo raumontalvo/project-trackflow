@@ -1,7 +1,9 @@
 from datetime import datetime
-from typing import Literal
+from typing import Any, Literal
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from sqlalchemy import Column, DateTime, Index
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field as SQLField
 from sqlmodel import Relationship, SQLModel
 
@@ -137,3 +139,45 @@ class StockExit(SQLModel, table=True):
     user_uuid: str
 
     sku_item: SKU | None = Relationship(back_populates="stock_exits")
+
+
+class TelemetryEventRecord(SQLModel, table=True):
+    __tablename__ = "telemetry_events"
+
+    event_id: str = SQLField(primary_key=True)
+
+    timestamp: datetime = SQLField(
+        sa_column=Column(
+            DateTime(timezone=True),
+            nullable=False,
+        )
+    )
+
+    session_id: str
+    user_id: str
+    event_type: str
+    schema_version: str
+    request_id: str
+
+    tags: dict[str, Any] = SQLField(
+        sa_column=Column(
+            JSONB,
+            nullable=False,
+        )
+    )
+
+    __table_args__ = (
+        Index(
+            "ix_telemetry_events_timestamp",
+            "timestamp",
+        ),
+        Index(
+            "ix_telemetry_events_event_type",
+            "event_type",
+        ),
+        Index(
+            "ix_telemetry_events_tags_gin",
+            "tags",
+            postgresql_using="gin",
+        ),
+    )
