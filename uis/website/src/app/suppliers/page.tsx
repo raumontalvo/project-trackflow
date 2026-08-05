@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 type Supplier = {
   id: number;
@@ -48,7 +48,7 @@ export default function SuppliersPage() {
     notes: "",
   });
 
-  async function loadSuppliers() {
+  const loadSuppliers = useCallback(async () => {
     setLoading(true);
     setError("");
 
@@ -59,7 +59,9 @@ export default function SuppliersPage() {
       if (category) params.append("category", category);
 
       const query = params.toString();
-      const url = query ? `${API_URL}/suppliers?${query}` : `${API_URL}/suppliers`;
+      const url = query
+        ? `${API_URL}/suppliers?${query}`
+        : `${API_URL}/suppliers`;
 
       const res = await fetch(url);
       const data = await res.json();
@@ -74,11 +76,15 @@ export default function SuppliersPage() {
     } finally {
       setLoading(false);
     }
-  }
+  }, [country, category]);
 
   useEffect(() => {
-    loadSuppliers();
-  }, [country, category]);
+    const timeoutId = window.setTimeout(() => {
+      void loadSuppliers();
+    }, 0);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [loadSuppliers]);
 
   async function createSupplier(e: React.FormEvent) {
     e.preventDefault();
