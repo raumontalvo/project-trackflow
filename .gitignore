@@ -1,0 +1,9 @@
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# Local TrackFlow runtime data
+services/api/suppliers_db.json
