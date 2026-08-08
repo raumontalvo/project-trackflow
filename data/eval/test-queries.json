@@ -1,0 +1,42 @@
+[
+  {
+    "question": "What is the standard return window?",
+    "expected_source_document": "returns-policy",
+    "expected_chunk_index": 2
+  },
+  {
+    "question": "How are international returns handled?",
+    "expected_source_document": "returns-policy",
+    "expected_chunk_index": 4
+  },
+  {
+    "question": "Which carrier best covers rural Aragón?",
+    "expected_source_document": "carrier-coverage",
+    "expected_chunk_index": 2
+  },
+  {
+    "question": "Can an account manager manually choose a carrier?",
+    "expected_source_document": "carrier-coverage",
+    "expected_chunk_index": 3
+  },
+  {
+    "question": "How long does standard domestic shipping take?",
+    "expected_source_document": "sla-delivery",
+    "expected_chunk_index": 1
+  },
+  {
+    "question": "Can TrackFlow guarantee delivery times during Black Friday?",
+    "expected_source_document": "sla-delivery",
+    "expected_chunk_index": 3
+  },
+  {
+    "question": "When does the long-term inventory fee begin?",
+    "expected_source_document": "storage-pricing",
+    "expected_chunk_index": 1
+  },
+  {
+    "question": "Can an account manager offer a storage discount?",
+    "expected_source_document": "storage-pricing",
+    "expected_chunk_index": 3
+  }
+]
