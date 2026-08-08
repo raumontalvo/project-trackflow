@@ -23,6 +23,9 @@ from data.pipelines.rfp_intake.persistence import (
     mark_ticket_error,
     persist_valid_rfp,
 )
+from data.pipelines.rfp_intake.response_service import (
+    generate_ticket_response,
+)
 from services.api.database import engine
 from services.api.models import DepartmentSection, RFP, Ticket
 
@@ -65,10 +68,12 @@ def _run_intake_background(
             )
 
         metadata = result.get("rfp_metadata") or {}
+
         department_results = result.get(
             "department_results",
             {},
         )
+
         summary = result.get("summary") or {}
 
         persist_valid_rfp(
@@ -76,6 +81,25 @@ def _run_intake_background(
             metadata=metadata,
             department_results=department_results,
             summary=summary,
+        )
+
+    except Exception as exc:
+        mark_ticket_error(
+            ticket_id=ticket_id,
+            error_message=str(exc),
+        )
+
+
+def _run_response_generation_background(
+    ticket_id: str,
+) -> None:
+    """
+    Run Part 2 proposal generation and evaluation in the background.
+    """
+
+    try:
+        generate_ticket_response(
+            ticket_id
         )
 
     except Exception as exc:
@@ -150,6 +174,7 @@ async def upload_rfp(
         ticket = create_ticket(
             raw_pdf_path=str(raw_path),
         )
+
     except Exception:
         raw_path.unlink(missing_ok=True)
         raise
@@ -166,12 +191,56 @@ async def upload_rfp(
     }
 
 
+@router.post(
+    "/{ticket_id}/generate",
+    status_code=status.HTTP_202_ACCEPTED,
+)
+def generate_rfp_response(
+    ticket_id: str,
+    background_tasks: BackgroundTasks,
+) -> dict[str, str]:
+    """
+    Start Part 2 response generation for an intake-complete RFP ticket.
+    """
+
+    with Session(engine) as session:
+        ticket = session.get(
+            Ticket,
+            ticket_id,
+        )
+
+        if ticket is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="RFP ticket not found.",
+            )
+
+        if ticket.status != "intake_complete":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "RFP response generation requires "
+                    "an intake_complete ticket."
+                ),
+            )
+
+    background_tasks.add_task(
+        _run_response_generation_background,
+        ticket_id,
+    )
+
+    return {
+        "ticket_id": ticket_id,
+        "status": "drafting",
+    }
+
+
 @router.get("/{ticket_id}")
 def get_rfp_ticket(
     ticket_id: str,
 ) -> dict:
     """
-    Return current ticket status and Part 1 result when available.
+    Return current ticket status and RFP results when available.
     """
 
     with Session(engine) as session:
@@ -242,6 +311,11 @@ def get_rfp_ticket(
                 "department_id": section.department_id,
                 "owner": section.owner,
                 "key_aspects": section.key_aspects,
+                "draft_content": section.draft_content,
+                "evaluation_results": section.evaluation_results,
+                "approval_status": section.approval_status,
+                "approver": section.approver,
+                "approved_at": section.approved_at,
                 "created_at": section.created_at,
                 "updated_at": section.updated_at,
             }

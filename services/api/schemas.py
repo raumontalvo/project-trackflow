@@ -83,7 +83,7 @@ class StockMovementResponse(BaseModel):
 
 
 # ---------------------------------------------------------------------------
-# Milestone 9 Part 1 — RFP intake API schemas
+# Milestone 9 — RFP workflow API schemas
 # ---------------------------------------------------------------------------
 
 RFPStatus = Literal[
@@ -92,6 +92,7 @@ RFPStatus = Literal[
     "intake_complete",
     "drafting",
     "under_evaluation",
+    "needs_human_review",
     "waiting_for_approval",
     "done",
 ]
@@ -193,7 +194,7 @@ class DepartmentKeyAspects(BaseModel):
 
 class DepartmentSectionResponse(BaseModel):
     """
-    Persisted department analysis returned to Sales.
+    Persisted department analysis and Part 2 proposal result.
     """
 
     model_config = ConfigDict(from_attributes=True)
@@ -205,6 +206,14 @@ class DepartmentSectionResponse(BaseModel):
     owner: str
 
     key_aspects: dict = Field(default_factory=dict)
+
+    draft_content: str | None = None
+
+    evaluation_results: dict | None = None
+
+    approval_status: str | None = None
+    approver: str | None = None
+    approved_at: datetime | None = None
 
     created_at: datetime
     updated_at: datetime
@@ -260,7 +269,7 @@ class TicketStatusResponse(BaseModel):
 
 class RFPIntakeResultResponse(BaseModel):
     """
-    Full Part 1 result returned when a ticket has finished processing.
+    Full RFP workflow result returned while the ticket progresses.
     """
 
     ticket: TicketStatusResponse

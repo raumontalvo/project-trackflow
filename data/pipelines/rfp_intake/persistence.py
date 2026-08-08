@@ -196,3 +196,45 @@ def get_rfp(
 
     with Session(engine) as session:
         return session.get(RFP, rfp_id)
+
+def persist_generated_section(
+    section_id: str,
+    draft_content: str,
+    evaluation_result: dict[str, Any],
+    iterations: int,
+    needs_human_review: bool,
+) -> DepartmentSection:
+    with Session(engine) as session:
+        section = session.get(
+            DepartmentSection,
+            section_id,
+        )
+
+        if section is None:
+            raise ValueError(
+                f"RFP department section not found: {section_id}"
+            )
+
+        section.draft_content = draft_content
+        section.evaluation_results = {
+            "evaluation": evaluation_result,
+            "iterations": iterations,
+            "needs_human_review": needs_human_review,
+        }
+        section.updated_at = datetime.utcnow()
+
+        session.add(section)
+        session.commit()
+        session.refresh(section)
+
+        return section
+
+
+def get_ticket(
+    ticket_id: str,
+) -> Ticket | None:
+    with Session(engine) as session:
+        return session.get(
+            Ticket,
+            ticket_id,
+        )
