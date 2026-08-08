@@ -1,0 +1,97 @@
+{
+  "run_id": "7d855afe-906b-4945-adcd-e1125eba748d",
+  "timestamp": "2026-08-06T22:52:56.033374+00:00",
+  "question": "What is the standard return window?",
+  "events": [
+    {
+      "node": "validate_question",
+      "output": {
+        "question": "What is the standard return window?",
+        "error": null
+      }
+    },
+    {
+      "node": "retrieve_context",
+      "output": {
+        "chunks": [
+          {
+            "id": "3415437c-f7f4-517c-8e37-32ff783e01c4",
+            "score": 0.76789904,
+            "company": "trackflow",
+            "source_document": "returns-policy",
+            "section": "Returns Policy",
+            "language": "en",
+            "chunk_index": 2,
+            "text": "Standard return window: 30 days from delivery, unless the client brand has configured a different window in their contract."
+          },
+          {
+            "id": "2ab594af-5932-5042-89f7-edb52dc9ecfe",
+            "score": 0.34637704,
+            "company": "trackflow",
+            "source_document": "returns-policy",
+            "section": "Returns Policy",
+            "language": "en",
+            "chunk_index": 1,
+            "text": "1. The end customer requests a return through the brand's portal.\n2. TrackFlow automatically generates the return label if the reason falls\nwithin the rules configured by the client (e.g. wrong size, defective product).\n3. The product arrives at the warehouse and an operative inspects and\nclassifies it as: fit for resale, fit for reconditioning, or not fit (disposal)."
+          },
+          {
+            "id": "d4b131a5-9f21-54a5-9d1f-d3b42b019b15",
+            "score": 0.30642715,
+            "company": "trackflow",
+            "source_document": "returns-policy",
+            "section": "Returns Policy",
+            "language": "en",
+            "chunk_index": 4,
+            "text": "International returns (purchased in one country, returned in another) are not covered by the standard automated process and require manual handling by Sofía Ramos's team (Returns Manager)."
+          }
+        ],
+        "context": "[Source 1]\nDocument: returns-policy\nSection: Returns Policy\nChunk index: 2\nContent: Standard return window: 30 days from delivery, unless the client brand has configured a different window in their contract.\n\n[Source 2]\nDocument: returns-policy\nSection: Returns Policy\nChunk index: 1\nContent: 1. The end customer requests a return through the brand's portal.\n2. TrackFlow automatically generates the return label if the reason falls\nwithin the rules configured by the client (e.g. wrong size, defective product).\n3. The product arrives at the warehouse and an operative inspects and\nclassifies it as: fit for resale, fit for reconditioning, or not fit (disposal).\n\n[Source 3]\nDocument: returns-policy\nSection: Returns Policy\nChunk index: 4\nContent: International returns (purchased in one country, returned in another) are not covered by the standard automated process and require manual handling by Sofía Ramos's team (Returns Manager)."
+      }
+    },
+    {
+      "node": "generate_answer",
+      "output": {
+        "answer": "The standard return window is 30 days from delivery, unless your brand has configured a different window in your contract."
+      }
+    }
+  ],
+  "final_state": {
+    "question": "What is the standard return window?",
+    "run_id": "7d855afe-906b-4945-adcd-e1125eba748d",
+    "error": null,
+    "chunks": [
+      {
+        "id": "3415437c-f7f4-517c-8e37-32ff783e01c4",
+        "score": 0.76789904,
+        "company": "trackflow",
+        "source_document": "returns-policy",
+        "section": "Returns Policy",
+        "language": "en",
+        "chunk_index": 2,
+        "text": "Standard return window: 30 days from delivery, unless the client brand has configured a different window in their contract."
+      },
+      {
+        "id": "2ab594af-5932-5042-89f7-edb52dc9ecfe",
+        "score": 0.34637704,
+        "company": "trackflow",
+        "source_document": "returns-policy",
+        "section": "Returns Policy",
+        "language": "en",
+        "chunk_index": 1,
+        "text": "1. The end customer requests a return through the brand's portal.\n2. TrackFlow automatically generates the return label if the reason falls\nwithin the rules configured by the client (e.g. wrong size, defective product).\n3. The product arrives at the warehouse and an operative inspects and\nclassifies it as: fit for resale, fit for reconditioning, or not fit (disposal)."
+      },
+      {
+        "id": "d4b131a5-9f21-54a5-9d1f-d3b42b019b15",
+        "score": 0.30642715,
+        "company": "trackflow",
+        "source_document": "returns-policy",
+        "section": "Returns Policy",
+        "language": "en",
+        "chunk_index": 4,
+        "text": "International returns (purchased in one country, returned in another) are not covered by the standard automated process and require manual handling by Sofía Ramos's team (Returns Manager)."
+      }
+    ],
+    "context": "[Source 1]\nDocument: returns-policy\nSection: Returns Policy\nChunk index: 2\nContent: Standard return window: 30 days from delivery, unless the client brand has configured a different window in their contract.\n\n[Source 2]\nDocument: returns-policy\nSection: Returns Policy\nChunk index: 1\nContent: 1. The end customer requests a return through the brand's portal.\n2. TrackFlow automatically generates the return label if the reason falls\nwithin the rules configured by the client (e.g. wrong size, defective product).\n3. The product arrives at the warehouse and an operative inspects and\nclassifies it as: fit for resale, fit for reconditioning, or not fit (disposal).\n\n[Source 3]\nDocument: returns-policy\nSection: Returns Policy\nChunk index: 4\nContent: International returns (purchased in one country, returned in another) are not covered by the standard automated process and require manual handling by Sofía Ramos's team (Returns Manager).",
+    "answer": "The standard return window is 30 days from delivery, unless your brand has configured a different window in your contract."
+  }
+}
