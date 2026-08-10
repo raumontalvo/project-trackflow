@@ -26,6 +26,8 @@ from data.pipelines.rfp_intake.nodes.worker import (
     department_worker_node,
 )
 from data.pipelines.rfp_intake.state import RFPIntakeState
+from data.pipelines.rfp_intake.persistence import get_ticket
+from services.api.sse import publish_rfp_ticket_created
 
 
 def document_node(
@@ -45,6 +47,42 @@ def document_node(
         "markdown": markdown,
         "readability_metrics": readability_metrics,
     }
+
+
+def notify_rfp_created_node(
+    state: RFPIntakeState,
+) -> RFPIntakeState:
+    """Publish the real-time event for a newly accepted TrackFlow RFP."""
+
+    ticket_id = state.get("ticket_id")
+    rfp_id = state.get("rfp_id")
+    metadata = state.get("rfp_metadata", {})
+
+    if not ticket_id or not rfp_id:
+        raise ValueError(
+            "RFP notification requires ticket_id and rfp_id."
+        )
+
+    ticket = get_ticket(ticket_id)
+
+    if ticket is None:
+        raise ValueError(
+            f"RFP ticket not found: {ticket_id}"
+        )
+
+    publish_rfp_ticket_created(
+        ticket_id=ticket_id,
+        rfp_id=rfp_id,
+        client_name=metadata.get("client_name"),
+        client_country=metadata.get("client_country"),
+        services_requested=metadata.get(
+            "services_requested",
+            [],
+        ),
+        created_at=ticket.created_at,
+    )
+
+    return {}
 
 
 def attach_readability_node(
@@ -164,6 +202,11 @@ def build_graph():
     )
 
     builder.add_node(
+        "notify_rfp_created",
+        notify_rfp_created_node,
+    )
+
+    builder.add_node(
         "attach_readability",
         attach_readability_node,
     )
@@ -219,6 +262,11 @@ def build_graph():
 
     builder.add_edge(
         "metadata",
+        "notify_rfp_created",
+    )
+
+    builder.add_edge(
+        "notify_rfp_created",
         "attach_readability",
     )
 

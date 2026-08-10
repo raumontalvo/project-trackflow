@@ -71,6 +71,7 @@ def update_ticket_status(
 
 def persist_valid_rfp(
     ticket_id: str,
+    rfp_id: str,
     metadata: dict[str, Any],
     department_results: dict[str, dict[str, Any]],
     summary: dict[str, Any] | None = None,

@@ -6,6 +6,7 @@ import json
 import re
 from datetime import date
 from typing import Literal
+from uuid import uuid4
 
 from pydantic import BaseModel, Field, ValidationError
 
@@ -260,6 +261,7 @@ def extract_metadata_node(
     )
 
     return {
+        "rfp_id": state.get("rfp_id") or str(uuid4()),
         "rfp_metadata": metadata,
         "active_departments": departments,
     }

@@ -11,6 +11,10 @@ const nextConfig: NextConfig = {
         source: "/api/rfp-intake/:path*",
         destination: "http://127.0.0.1:8000/rfp-intake/:path*",
       },
+      {
+        source: "/api/notifications/:path*",
+        destination: "http://127.0.0.1:8000/notifications/:path*",
+      },
     ];
   },
 };

@@ -415,3 +415,86 @@
     grid-template-columns: 1fr;
   }
 }
+.notificationStatus {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+}
+
+.connectionDot {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 999px;
+  background: #6b7280;
+}
+
+.connected {
+  background: #16a34a;
+}
+
+.reconnecting {
+  background: #d97706;
+}
+
+.disconnected {
+  background: #6b7280;
+}
+
+.notificationCard {
+  margin-bottom: 1.5rem;
+  padding: 1.5rem;
+  border: 1px solid #bfdbfe;
+  border-radius: 1rem;
+  background: #eff6ff;
+}
+
+.notificationHeading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-bottom: 0.75rem;
+}
+
+.notificationHeading h2 {
+  margin: 0.25rem 0 0;
+}
+
+.notificationBadge {
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  background: #dbeafe;
+  font-size: 0.75rem;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.notificationGrid {
+  display: grid;
+  grid-template-columns: repeat(
+    auto-fit,
+    minmax(150px, 1fr)
+  );
+  gap: 1rem;
+  margin-top: 1rem;
+}
+
+.notificationGrid div {
+  min-width: 0;
+}
+
+.notificationGrid dt {
+  margin-bottom: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  opacity: 0.65;
+}
+
+.notificationGrid dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
