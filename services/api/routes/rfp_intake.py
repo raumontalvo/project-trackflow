@@ -81,8 +81,16 @@ def _run_intake_background(
 
         summary = result.get("summary") or {}
 
+        rfp_id = result.get("rfp_id")
+
+        if not rfp_id:
+            raise RuntimeError(
+                "Valid RFP intake finished without an rfp_id."
+            )
+
         persist_valid_rfp(
             ticket_id=ticket_id,
+            rfp_id=rfp_id,
             metadata=metadata,
             department_results=department_results,
             summary=summary,

@@ -16,6 +16,11 @@ import {
   uploadRfp,
 } from "../lib/rfpIntakeServices";
 
+import {
+  RfpTicketCreatedNotification,
+  connectNotificationStream,
+} from "../lib/notificationServices";
+
 
 const POLL_INTERVAL_MS = 3000;
 
@@ -137,6 +142,28 @@ export default function Home() {
     useState<TicketResponse | null>(null);
   const [uploading, setUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [latestNotification, setLatestNotification] =
+    useState<RfpTicketCreatedNotification | null>(null);
+
+  const [notificationConnection, setNotificationConnection] =
+    useState<
+      "connected" | "reconnecting" | "disconnected"
+    >("disconnected");
+
+
+  useEffect(() => {
+    const disconnect = connectNotificationStream({
+      onRfpTicketCreated(notification) {
+        setLatestNotification(notification);
+      },
+      onConnectionChange(state) {
+        setNotificationConnection(state);
+      },
+    });
+
+    return disconnect;
+  }, []);
 
 
   useEffect(() => {
@@ -267,6 +294,84 @@ export default function Home() {
             <strong>Miguel Torres</strong>
           </div>
         </header>
+
+        <section className={styles.notificationStatus}>
+          <span
+            className={`${styles.connectionDot} ${
+              styles[notificationConnection] ?? ""
+            }`}
+          />
+
+          <span>
+            Real-time notifications:{" "}
+            {notificationConnection}
+          </span>
+        </section>
+
+        {latestNotification ? (
+          <section className={styles.notificationCard}>
+            <div className={styles.notificationHeading}>
+              <div>
+                <p className={styles.eyebrow}>
+                  New RFP notification
+                </p>
+
+                <h2>
+                  {latestNotification.client_name ??
+                    "New client RFP"}
+                </h2>
+              </div>
+
+              <span className={styles.notificationBadge}>
+                needs processing
+              </span>
+            </div>
+
+            <p>
+              A new RFP ticket entered TrackFlow and is now
+              analyzing. No dashboard refresh was required.
+            </p>
+
+            <dl className={styles.notificationGrid}>
+              <div>
+                <dt>Ticket</dt>
+                <dd>
+                  <code>
+                    {latestNotification.ticket_id}
+                  </code>
+                </dd>
+              </div>
+
+              <div>
+                <dt>RFP</dt>
+                <dd>
+                  <code>
+                    {latestNotification.rfp_id}
+                  </code>
+                </dd>
+              </div>
+
+              <div>
+                <dt>Country</dt>
+                <dd>
+                  {latestNotification.client_country ??
+                    "Not provided"}
+                </dd>
+              </div>
+
+              <div>
+                <dt>Services</dt>
+                <dd>
+                  {latestNotification.services_requested.length
+                    ? latestNotification.services_requested.join(
+                        ", "
+                      )
+                    : "Not provided"}
+                </dd>
+              </div>
+            </dl>
+          </section>
+        ) : null}
 
         <section className={styles.uploadCard}>
           <div>
