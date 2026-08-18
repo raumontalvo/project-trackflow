@@ -1,8 +1,8 @@
 "use client";
-"use client";
 
-
+import { useState } from 'react';
 import { useParams } from 'next/navigation';
+import { useRequireAuth } from '../../../hooks/useRequireAuth';
 import { useCandidate } from '../../../hooks/useCandidate';
 import { useNotes } from '../../../hooks/useNotes';
 import Spinner from '../../../components/ui/Spinner';
@@ -13,10 +13,20 @@ import CandidateActions from '../../../components/candidates/CandidateActions';
 import CandidateEditForm from '../../../components/candidates/CandidateEditForm';
 import NotesList from '../../../components/notes/NotesList';
 import AddNoteForm from '../../../components/notes/AddNoteForm';
-import { useState } from 'react';
+
 import type { Status, Stage } from '../../../types/candidate';
 
 export default function CandidateDetailPage() {
+  const { checkingAuth } = useRequireAuth();
+
+  if (checkingAuth) {
+    return <div className="p-6">Checking session...</div>;
+  }
+
+  return <CandidateDetailContent />;
+}
+
+function CandidateDetailContent() {
   const params = useParams();
   const id = params?.id as string;
   const { candidate, loading, error, refresh, editCandidate, patchStatusStage } = useCandidate(id);
@@ -33,6 +43,7 @@ export default function CandidateDetailPage() {
       setPatchLoading(false);
     }
   };
+
   const handleStageChange = async (stage: string) => {
     setPatchLoading(true);
     try {
@@ -48,9 +59,11 @@ export default function CandidateDetailPage() {
       <BackButton />
       {loading && <Spinner />}
       {error && <ErrorMessage message={error} />}
+
       {!loading && candidate && (
         <>
           <CandidateDetail candidate={candidate} />
+
           <CandidateActions
             status={candidate.status}
             stage={candidate.stage}
@@ -58,12 +71,14 @@ export default function CandidateDetailPage() {
             onStageChange={handleStageChange}
             loading={patchLoading}
           />
+
           <button
             className="mb-4 underline text-blue-700"
             onClick={() => setEditMode((v) => !v)}
           >
             {editMode ? 'Cancel Edit' : 'Edit Candidate Info'}
           </button>
+
           {editMode && (
             <CandidateEditForm
               candidate={candidate}
@@ -80,7 +95,9 @@ export default function CandidateDetailPage() {
               }}
             />
           )}
+
           <h3 className="text-lg font-semibold mt-8 mb-2">Interview Notes</h3>
+
           <AddNoteForm
             onAdd={async (content) => {
               await createNote({ content });
@@ -89,7 +106,9 @@ export default function CandidateDetailPage() {
             }}
             loading={notesLoading}
           />
+
           {notesError && <ErrorMessage message={notesError} />}
+
           <NotesList
             notes={notes}
             loading={notesLoading}

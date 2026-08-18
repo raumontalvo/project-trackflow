@@ -1,0 +1,37 @@
+services:
+  ui:
+    build:
+      context: ./uis
+      dockerfile: Dockerfile
+    ports:
+      - "3000:3000"
+      - "3001:3001"
+    volumes:
+      - ./uis:/uis
+      - /uis/website/node_modules
+      - /uis/backoffice/node_modules
+    env_file:
+      - .env
+    depends_on:
+      - backend
+    networks:
+      - company_network
+
+  backend:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./services/api:/app/services/api
+      - ./shared:/app/shared
+    env_file:
+      - .env
+    networks:
+      - company_network
+
+networks:
+  company_network:
+    name: company_network
+    driver: bridge
