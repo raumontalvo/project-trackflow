@@ -9,6 +9,7 @@
 - Backoffice home page implemented with business summary, service operations, and Milestone 2 business logic section
 - Milestone 2 business logic imported (not copied) in backoffice and referenced on dashboard
 - Tailwind/PostCSS build errors resolved (no references in code)
+- Merged latest main into feature/websocket-chat and resolved PR conflict in services/api/main.py while preserving websocket chat routes and new API modules
 
 ## Validation Results
 - Website and backoffice apps build successfully (pending final build run)

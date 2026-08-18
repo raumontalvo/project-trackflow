@@ -1,3 +1,5 @@
+"""FastAPI application for TrackFlow services."""
+
 import os
 import sys
 import tempfile
@@ -16,24 +18,42 @@ from shared.incident_analysis.analyzer import analyze_csv
 from shared.incident_analysis.exporter import export_results_to_csv
 from services.api.auth import get_current_user
 from services.api.database import create_db_and_tables
+from services.api.routes.agent import router as agent_router
 from services.api.routes.auth_routes import router as auth_router
+from services.api.routes.chat import router as chat_router
 from services.api.routes.incidents import router as incidents_router
 from services.api.routes.inventory import router as inventory_router
 from services.api.routes.suppliers import router as suppliers_router
 from services.api.routes.users_routes import router as users_router
 
-app = FastAPI(title="TrackFlow Incident Analyzer API")
+
+app = FastAPI(
+    title="TrackFlow API",
+    version="0.1.0",
+    description="TrackFlow operational and commercial services.",
+)
+
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+        "http://localhost:3002",
+        "http://127.0.0.1:3002",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
+
 LAST_RESULTS = None
 
+app.include_router(agent_router)
+app.include_router(chat_router)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(suppliers_router)
@@ -47,8 +67,13 @@ def on_startup():
 
 
 @app.get("/")
-def health_check():
-    return {"status": "ok", "service": "TrackFlow Incident Analyzer API"}
+def health_check() -> dict[str, str]:
+    return {"status": "ok", "service": "TrackFlow API"}
+
+
+@app.get("/health")
+def health() -> dict[str, str]:
+    return {"status": "ok"}
 
 
 @app.post("/api/incidents/analyze", dependencies=[Depends(get_current_user)])
