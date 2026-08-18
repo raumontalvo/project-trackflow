@@ -1,9 +1,8 @@
 "use client";
-"use client";
-
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '../hooks/useRequireAuth';
 import { useCandidates } from '../hooks/useCandidates';
 import { createCandidate } from '../services/candidates';
 import CandidateForm from '../components/candidates/CandidateForm';
@@ -17,6 +16,16 @@ import PageHeader from '../components/ui/PageHeader';
 import type { RecordCreate } from '../types/candidate';
 
 export default function HomePage() {
+  const { checkingAuth } = useRequireAuth();
+
+  if (checkingAuth) {
+    return <div className="p-6">Checking session...</div>;
+  }
+
+  return <HomeContent />;
+}
+
+function HomeContent() {
   const router = useRouter();
   const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
   const [search, setSearch] = useState(searchParams?.get('search') || '');
@@ -29,7 +38,6 @@ export default function HomePage() {
     stage,
   });
 
-  // Update query params without reload
   const updateQuery = (key: string, value: string) => {
     const params = new URLSearchParams(window.location.search);
     if (value) params.set(key, value);
@@ -46,6 +54,7 @@ export default function HomePage() {
     setCreateLoading(true);
     setCreateError(null);
     setCreateSuccess(false);
+
     try {
       await createCandidate(values);
       setCreateSuccess(true);
@@ -69,39 +78,40 @@ export default function HomePage() {
           {showForm ? 'Cancel' : 'Register Candidate'}
         </button>
       </PageHeader>
+
       {showForm && (
         <div className="mb-6">
-          <CandidateForm
-            loading={createLoading}
-            onSubmit={handleCreate}
-          />
+          <CandidateForm loading={createLoading} onSubmit={handleCreate} />
           {createError && <ErrorMessage message={createError} />}
           {createSuccess && <div className="text-green-600 text-sm">Candidate registered successfully.</div>}
         </div>
       )}
+
       <div className="flex flex-col md:flex-row md:items-center md:gap-4 mb-4">
         <div className="flex-1 mb-2 md:mb-0">
           <CandidateSearch
             value={search}
-            onChange={v => {
+            onChange={(v) => {
               setSearch(v);
               updateQuery('search', v);
             }}
           />
         </div>
+
         <CandidateFilters
           status={status}
           stage={stage}
-          onStatusChange={v => {
+          onStatusChange={(v) => {
             setStatus(v);
             updateQuery('status', v);
           }}
-          onStageChange={v => {
+          onStageChange={(v) => {
             setStage(v);
             updateQuery('stage', v);
           }}
         />
       </div>
+
       {loading && <Spinner />}
       {error && <ErrorMessage message={error} />}
       <CandidateList candidates={candidates} />

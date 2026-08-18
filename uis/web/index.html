@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>TrackFlow Incident Analyzer</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 32px;
+      background: #f6f8fb;
+      color: #1f2937;
+    }
+
+    h1 {
+      margin-bottom: 8px;
+    }
+
+    .panel, .card, table {
+      background: white;
+      border: 1px solid #ddd;
+      border-radius: 8px;
+    }
+
+    .panel {
+      padding: 20px;
+      margin-bottom: 20px;
+    }
+
+    button {
+      padding: 8px 12px;
+      margin-left: 8px;
+      cursor: pointer;
+    }
+
+    .cards {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-bottom: 20px;
+    }
+
+    .card {
+      padding: 16px;
+      min-width: 180px;
+    }
+
+    .card strong {
+      display: block;
+      font-size: 28px;
+      margin-top: 8px;
+    }
+
+    table {
+      border-collapse: collapse;
+      width: 100%;
+      margin-bottom: 20px;
+      overflow: hidden;
+    }
+
+    th, td {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+      text-align: left;
+    }
+
+    th {
+      background: #eef2ff;
+    }
+
+    .error {
+      color: #b91c1c;
+      font-weight: bold;
+    }
+
+    .success {
+      color: #166534;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <h1>TrackFlow Incident Analyzer</h1>
+  <p>Upload an incident CSV file to analyze records, invalid entries, categories, statuses, countries, and satisfaction scores.</p>
+
+  <div class="panel">
+    <input type="file" id="csvFile" accept=".csv" />
+    <button onclick="analyzeFile()">Analyze CSV</button>
+    <button onclick="downloadResults()">Download Results CSV</button>
+    <p id="message">Upload a CSV file to begin.</p>
+  </div>
+
+  <div id="results"></div>
+
+  <script>
+    const API_URL = "https://probable-doodle-wrwr7wwqq46pcrqp-8000.app.github.dev";
+
+    function createTable(title, rows, headers = ["Metric", "Count", "Percentage"]) {
+      let html = `<h2>${title}</h2>`;
+      html += "<table><thead><tr>";
+
+      headers.forEach(header => {
+        html += `<th>${header}</th>`;
+      });
+
+      html += "</tr></thead><tbody>";
+
+      rows.forEach(row => {
+        html += "<tr>";
+        row.forEach(cell => {
+          html += `<td>${cell}</td>`;
+        });
+        html += "</tr>";
+      });
+
+      html += "</tbody></table>";
+      return html;
+    }
+
+    function renderResults(data) {
+      const results = document.getElementById("results");
+
+      const invalidRows = Object.entries(data.invalid_breakdown).map(([key, value]) => [
+        key.replaceAll("_", " "),
+        value
+      ]);
+
+      const categoryRows = Object.entries(data.category_breakdown).map(([key, item]) => [
+        key,
+        item.count,
+        `${item.percentage}%`
+      ]);
+
+      const statusRows = Object.entries(data.status_breakdown).map(([key, item]) => [
+        key,
+        item.count,
+        `${item.percentage}%`
+      ]);
+
+      const countryRows = Object.entries(data.country_breakdown).map(([key, item]) => [
+        key,
+        item.count,
+        `${item.percentage}%`
+      ]);
+
+      const satisfactionRows = Object.entries(data.satisfaction.scores).map(([score, count]) => [
+        `Score ${score}`,
+        count
+      ]);
+
+      results.innerHTML = `
+        <div class="cards">
+          <div class="card">Total Records<strong>${data.total_records}</strong></div>
+          <div class="card">Valid Records<strong>${data.valid_records}</strong></div>
+          <div class="card">Invalid Records<strong>${data.invalid_records}</strong></div>
+          <div class="card">Average Satisfaction<strong>${data.satisfaction.average_score.toFixed(2)} / 5</strong></div>
+        </div>
+
+        ${createTable("Invalid Records Breakdown", invalidRows, ["Issue", "Count"])}
+        ${createTable("Category Breakdown", categoryRows)}
+        ${createTable("Status Breakdown", statusRows)}
+        ${createTable("Country Breakdown", countryRows)}
+
+        <h2>Satisfaction Index</h2>
+        <div class="panel">
+          <p>Scored incidents: <strong>${data.satisfaction.scored_incidents}</strong> of <strong>${data.satisfaction.closed_incidents}</strong></p>
+          <p>Average score: <strong>${data.satisfaction.average_score.toFixed(2)} / 5.00</strong></p>
+        </div>
+
+        ${createTable("Satisfaction Score Breakdown", satisfactionRows, ["Score", "Count"])}
+      `;
+    }
+
+    async function analyzeFile() {
+      const fileInput = document.getElementById("csvFile");
+      const message = document.getElementById("message");
+      const results = document.getElementById("results");
+
+      if (!fileInput.files.length) {
+        message.textContent = "Please select a CSV file first.";
+        message.className = "error";
+        return;
+      }
+
+      message.textContent = "Analyzing file...";
+      message.className = "";
+      results.innerHTML = "";
+
+      try {
+        const formData = new FormData();
+        formData.append("file", fileInput.files[0]);
+
+        const response = await fetch(`${API_URL}/api/incidents/analyze`, {
+          method: "POST",
+          body: formData
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          message.textContent = data.detail || "Error analyzing file.";
+          message.className = "error";
+          return;
+        }
+
+        message.textContent = "Analysis completed successfully.";
+        message.className = "success";
+        renderResults(data);
+      } catch (error) {
+        message.textContent = "Connection error. Make sure the API is running on port 8000.";
+        message.className = "error";
+      }
+    }
+
+    function downloadResults() {
+      window.location.href = `${API_URL}/api/incidents/results/export`;
+    }
+  </script>
+</body>
+</html>
