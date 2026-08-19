@@ -181,3 +181,13 @@ class TelemetryEventRecord(SQLModel, table=True):
             postgresql_using="gin",
         ),
     )
+
+
+class DeadLetterTask(SQLModel, table=True):
+    __tablename__ = "dead_letter_tasks"
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    task_id: str = SQLField(index=True)
+    attempt: int
+    error_message: str
+    failed_at: datetime = SQLField(default_factory=datetime.utcnow)
