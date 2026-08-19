@@ -110,8 +110,21 @@ services:
     networks:
       - company_network
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    container_name: trackflow-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_storage:/qdrant/storage
+    restart: unless-stopped
+    networks:
+      - company_network
+
 volumes:
   task_data:
+  qdrant_storage:
 
 networks:
   company_network:
