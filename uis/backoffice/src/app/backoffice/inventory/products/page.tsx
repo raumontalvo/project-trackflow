@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+
 import {
   getInventoryProducts,
   type InventoryProduct,
@@ -10,15 +11,53 @@ import {
 import { track } from "@/lib/telemetry";
 
 function getStockStatus(stock: number) {
-  if (stock <= 10) return { label: "Critical", color: "#dc2626" };
-  if (stock <= 25) return { label: "Low", color: "#ca8a04" };
-  return { label: "Healthy", color: "#16a34a" };
+  if (stock <= 10) {
+    return {
+      label: "Critical",
+      color: "#dc2626",
+    };
+  }
+
+  if (stock <= 25) {
+    return {
+      label: "Low",
+      color: "#ca8a04",
+    };
+  }
+
+  return {
+    label: "Healthy",
+    color: "#16a34a",
+  };
+}
+
+function normalizeWarehouse(
+  warehouse: Warehouse
+): "los_angeles" | "zaragoza" {
+  return warehouse === "LA" ? "los_angeles" : "zaragoza";
+}
+
+function createClientId(clientName: string): string {
+  return clientName
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function getCreatedBy(): string {
+  if (typeof window === "undefined") {
+    return "unknown";
+  }
+
+  return localStorage.getItem("user_uuid") ?? "unknown";
 }
 
 export default function InventoryProductsPage() {
   const [products, setProducts] = useState<InventoryProduct[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
 
   useEffect(() => {
     async function loadProducts() {
@@ -28,22 +67,11 @@ export default function InventoryProductsPage() {
 
         const data = await getInventoryProducts();
         setProducts(data);
-
-        const warehouses: Warehouse[] = ["LA", "ZGZ"];
-
-        for (const warehouse of warehouses) {
-          const itemCount = data.filter(
-            (product) => product.warehouse === warehouse
-          ).length;
-
-          track("sku_list_viewed", {
-            warehouse,
-            item_count: itemCount,
-          });
-        }
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Failed to load products."
+          err instanceof Error
+            ? err.message
+            : "Failed to load products."
         );
       } finally {
         setLoading(false);
@@ -53,14 +81,46 @@ export default function InventoryProductsPage() {
     void loadProducts();
   }, []);
 
+  function rejectDirectStockEdit(product: InventoryProduct): void {
+    track("direct_stock_edit_rejected", {
+      sku_id: String(product.id),
+      sku_code: product.sku,
+      warehouse: normalizeWarehouse(product.warehouse),
+      client_id: createClientId(product.client_name),
+      attempted_field: "current_stock",
+      rejection_reason: "direct_stock_modification_not_allowed",
+      created_by: getCreatedBy(),
+    });
+
+    setNotice(
+      `Direct stock editing is not allowed for ${product.sku}. Use an inbound or outbound order instead.`
+    );
+  }
+
   return (
-    <main style={{ padding: "32px", maxWidth: "1200px", margin: "0 auto" }}>
+    <main
+      style={{
+        padding: "32px",
+        maxWidth: "1200px",
+        margin: "0 auto",
+      }}
+    >
       <header style={{ marginBottom: "24px" }}>
-        <p style={{ color: "#6b7280", marginBottom: "8px" }}>
+        <p
+          style={{
+            color: "#6b7280",
+            marginBottom: "8px",
+          }}
+        >
           TrackFlow Warehouse Operations
         </p>
 
-        <h1 style={{ fontSize: "32px", marginBottom: "8px" }}>
+        <h1
+          style={{
+            fontSize: "32px",
+            marginBottom: "8px",
+          }}
+        >
           Inventory Products
         </h1>
 
@@ -86,7 +146,9 @@ export default function InventoryProductsPage() {
           Register Outbound Exit
         </Link>
 
-        <Link href="/backoffice/inventory/orders">View Order History</Link>
+        <Link href="/backoffice/inventory/orders">
+          View Order History
+        </Link>
       </nav>
 
       {loading && <p>Loading inventory products...</p>}
@@ -98,9 +160,24 @@ export default function InventoryProductsPage() {
             background: "#fee2e2",
             color: "#991b1b",
             borderRadius: "8px",
+            marginBottom: "16px",
           }}
         >
           {error}
+        </div>
+      )}
+
+      {notice && (
+        <div
+          style={{
+            padding: "16px",
+            background: "#fef3c7",
+            color: "#92400e",
+            borderRadius: "8px",
+            marginBottom: "16px",
+          }}
+        >
+          {notice}
         </div>
       )}
 
@@ -119,7 +196,12 @@ export default function InventoryProductsPage() {
             }}
           >
             <thead>
-              <tr style={{ background: "#f3f4f6", textAlign: "left" }}>
+              <tr
+                style={{
+                  background: "#f3f4f6",
+                  textAlign: "left",
+                }}
+              >
                 <th style={{ padding: "12px" }}>SKU</th>
                 <th style={{ padding: "12px" }}>Product</th>
                 <th style={{ padding: "12px" }}>Client</th>
@@ -138,18 +220,35 @@ export default function InventoryProductsPage() {
                 return (
                   <tr
                     key={product.id}
-                    style={{ borderTop: "1px solid #e5e7eb" }}
+                    style={{
+                      borderTop: "1px solid #e5e7eb",
+                    }}
                   >
-                    <td style={{ padding: "12px", fontWeight: 700 }}>
+                    <td
+                      style={{
+                        padding: "12px",
+                        fontWeight: 700,
+                      }}
+                    >
                       {product.sku}
                     </td>
 
-                    <td style={{ padding: "12px" }}>{product.name}</td>
+                    <td style={{ padding: "12px" }}>
+                      {product.name}
+                    </td>
+
                     <td style={{ padding: "12px" }}>
                       {product.client_name}
                     </td>
-                    <td style={{ padding: "12px" }}>{product.category}</td>
-                    <td style={{ padding: "12px" }}>{product.warehouse}</td>
+
+                    <td style={{ padding: "12px" }}>
+                      {product.category}
+                    </td>
+
+                    <td style={{ padding: "12px" }}>
+                      {product.warehouse}
+                    </td>
+
                     <td style={{ padding: "12px" }}>
                       {product.current_stock}
                     </td>
@@ -184,6 +283,21 @@ export default function InventoryProductsPage() {
                       >
                         Outbound
                       </Link>
+
+                      <button
+                        type="button"
+                        onClick={() => rejectDirectStockEdit(product)}
+                        style={{
+                          border: "1px solid #dc2626",
+                          background: "white",
+                          color: "#dc2626",
+                          padding: "4px 8px",
+                          borderRadius: "4px",
+                          cursor: "pointer",
+                        }}
+                      >
+                        Edit Stock
+                      </button>
                     </td>
                   </tr>
                 );

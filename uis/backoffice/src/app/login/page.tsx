@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+import { track } from "@/lib/telemetry";
+
 const API =
   process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:8000";
 
@@ -16,6 +18,32 @@ type ErrorResponse = {
   detail?: string;
 };
 
+type LoginFailureReason =
+  | "wrong_credentials"
+  | "expired_session"
+  | "locked_account";
+
+function getLoginFailureReason(error: unknown): LoginFailureReason {
+  if (!(error instanceof Error)) {
+    return "wrong_credentials";
+  }
+
+  const message = error.message.toLowerCase();
+
+  if (message.includes("locked")) {
+    return "locked_account";
+  }
+
+  if (
+    message.includes("expired") ||
+    message.includes("session")
+  ) {
+    return "expired_session";
+  }
+
+  return "wrong_credentials";
+}
+
 export default function LoginPage() {
   const router = useRouter();
 
@@ -23,8 +51,11 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [attemptCount, setAttemptCount] = useState(0);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
 
     setLoading(true);
@@ -43,7 +74,9 @@ export default function LoginPage() {
         body: form.toString(),
       });
 
-      const data = (await response.json()) as LoginResponse | ErrorResponse;
+      const data = (await response.json()) as
+        | LoginResponse
+        | ErrorResponse;
 
       if (!response.ok) {
         const message =
@@ -60,7 +93,9 @@ export default function LoginPage() {
         typeof data.access_token !== "string" ||
         typeof data.user_uuid !== "string"
       ) {
-        throw new Error("The login response is missing required fields.");
+        throw new Error(
+          "The login response is missing required fields."
+        );
       }
 
       localStorage.setItem("access_token", data.access_token);
@@ -68,7 +103,20 @@ export default function LoginPage() {
 
       router.push("/backoffice/inventory/products");
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Login failed.");
+      const nextAttemptCount = attemptCount + 1;
+      setAttemptCount(nextAttemptCount);
+
+      track("user_login_failed", {
+        failure_reason: getLoginFailureReason(err),
+        warehouse: "unknown",
+        user_role: "unknown",
+        attempt_count: nextAttemptCount,
+        ip_hash: "unavailable_client_side",
+      });
+
+      setError(
+        err instanceof Error ? err.message : "Login failed."
+      );
     } finally {
       setLoading(false);
     }
@@ -82,7 +130,9 @@ export default function LoginPage() {
         padding: 32,
       }}
     >
-      <h1 style={{ marginBottom: 24 }}>TrackFlow Login</h1>
+      <h1 style={{ marginBottom: 24 }}>
+        TrackFlow Login
+      </h1>
 
       {error && (
         <div

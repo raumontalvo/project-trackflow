@@ -4,10 +4,19 @@ const TELEMETRY_ENDPOINT =
   process.env.NEXT_PUBLIC_TELEMETRY_ENDPOINT ||
   "http://localhost:8000/telemetry/events";
 
-const SCHEMA_VERSION = "1.0";
+const SCHEMA_VERSION = "1.0.0";
 const MAX_BATCH_SIZE = 20;
 const FLUSH_INTERVAL_MS = 10_000;
 const MAX_ATTEMPTS = 3;
+
+export type TelemetryEventType =
+  | "receiving_order_created"
+  | "dispatch_order_created"
+  | "dispatch_order_failed"
+  | "stock_threshold_triggered"
+  | "direct_stock_edit_rejected"
+  | "user_login_failed"
+  | "dispatch_form_abandoned";
 
 export type TelemetryProperties = Record<string, unknown>;
 
@@ -16,13 +25,15 @@ export type TelemetryEvent = {
   timestamp: string;
   sessionId: string;
   userId: string;
-  event_type: string;
+  event_type: TelemetryEventType;
   schemaVersion: string;
   requestId: string;
   properties: TelemetryProperties;
 };
 
-let queue: Omit<TelemetryEvent, "requestId">[] = [];
+type QueuedTelemetryEvent = Omit<TelemetryEvent, "requestId">;
+
+let queue: QueuedTelemetryEvent[] = [];
 let flushTimer: number | null = null;
 let listenersRegistered = false;
 let flushInProgress = false;
@@ -58,10 +69,15 @@ function getSessionId(): string {
 }
 
 function createEvent(
-  eventType: string,
+  eventType: TelemetryEventType,
   properties: TelemetryProperties
-): Omit<TelemetryEvent, "requestId"> | null {
-  const userId = getUserId();
+): QueuedTelemetryEvent | null {
+  const sessionId = getSessionId();
+
+  // Login failures occur before authentication succeeds, so there may be
+  // no user_uuid yet. For that event only, use the anonymous session ID.
+  const userId =
+    getUserId() ?? (eventType === "user_login_failed" ? sessionId : null);
 
   if (!userId) {
     console.warn(
@@ -74,7 +90,7 @@ function createEvent(
   return {
     eventId: crypto.randomUUID(),
     timestamp: new Date().toISOString(),
-    sessionId: getSessionId(),
+    sessionId,
     userId,
     event_type: eventType,
     schemaVersion: SCHEMA_VERSION,
@@ -82,9 +98,7 @@ function createEvent(
   };
 }
 
-function attachRequestId(
-  events: Omit<TelemetryEvent, "requestId">[]
-): TelemetryEvent[] {
+function attachRequestId(events: QueuedTelemetryEvent[]): TelemetryEvent[] {
   const requestId = crypto.randomUUID();
 
   return events.map((event) => ({
@@ -128,6 +142,7 @@ async function sendBatch(
     }
 
     const backoffMs = 1_000 * 2 ** (attempt - 1);
+
     await delay(backoffMs);
     await sendBatch(batch, attempt + 1);
   }
@@ -166,14 +181,12 @@ function flushWithBeacon(): void {
 
   const batch = attachRequestId(pendingEvents);
   const payload = JSON.stringify({ events: batch });
+
   const blob = new Blob([payload], {
     type: "application/json",
   });
 
-  const accepted = navigator.sendBeacon(
-    TELEMETRY_ENDPOINT,
-    blob
-  );
+  const accepted = navigator.sendBeacon(TELEMETRY_ENDPOINT, blob);
 
   if (!accepted) {
     queue = pendingEvents.concat(queue);
@@ -205,7 +218,7 @@ export function startTelemetryService(): void {
 
   registerLifecycleListeners();
 
-  if (flushTimer) {
+  if (flushTimer !== null) {
     return;
   }
 
@@ -215,7 +228,7 @@ export function startTelemetryService(): void {
 }
 
 export function stopTelemetryService(): void {
-  if (!isBrowser() || !flushTimer) {
+  if (!isBrowser() || flushTimer === null) {
     return;
   }
 
@@ -224,7 +237,7 @@ export function stopTelemetryService(): void {
 }
 
 export function track(
-  eventType: string,
+  eventType: TelemetryEventType,
   properties: TelemetryProperties = {}
 ): void {
   if (!isBrowser()) {
