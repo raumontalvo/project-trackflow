@@ -13,3 +13,7 @@ services/api/suppliers_db.json
 
 # Agent memory runtime data
 data/agent_memory/
+
+# RFP intake runtime/test PDFs
+data/raw/*.pdf
+data/raw/test-fixtures/
