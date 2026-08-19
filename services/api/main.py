@@ -25,6 +25,7 @@ from services.api.routes.chat import router as chat_router
 from services.api.routes.incidents import router as incidents_router
 from services.api.routes.inventory import router as inventory_router
 from services.api.routes.knowledge import router as knowledge_router
+from services.api.routes.notifications import router as notifications_router
 from services.api.routes.rfp_intake import router as rfp_intake_router
 from services.api.routes.suppliers import router as suppliers_router
 from services.api.routes.telemetry import router as telemetry_router
@@ -58,6 +59,7 @@ app.include_router(inventory_router)
 app.include_router(telemetry_router)
 app.include_router(knowledge_router)
 app.include_router(rfp_intake_router)
+app.include_router(notifications_router)
 
 
 @app.on_event("startup")
