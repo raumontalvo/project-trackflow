@@ -44,7 +44,7 @@ async def test_invalid_question_stops_before_retrieval(
 async def test_valid_question_retrieves_then_generates(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A grounded question should follow retrieve -> generate."""
+    """A grounded question should pass all guards before returning."""
     retrieved_chunks = [
         {
             "id": "point-1",
@@ -64,10 +64,9 @@ async def test_valid_question_retrieves_then_generates(
     )
 
     monkeypatch.setattr(
-        "services.agent.nodes.generate_with_memory",
-        lambda **kwargs: (
-            "The standard return window is 30 days from delivery.",
-            None,
+        "services.agent.nodes.generate_answer",
+        lambda question, context: (
+            "The standard return window is 30 days from delivery."
         ),
     )
 
@@ -89,6 +88,7 @@ async def test_valid_question_retrieves_then_generates(
 
     assert "30 days" in result["answer"]
     assert "30 days from delivery" in result["context"]
+    assert result["output_guard_allowed"] is True
 
     executed_nodes = [
         event["node"]
@@ -96,20 +96,21 @@ async def test_valid_question_retrieves_then_generates(
     ]
 
     assert executed_nodes == [
-        "resolve_pending_memory",
         "validate_question",
-        "recall_memory",
+        "guard_input",
+        "tracking_authorization",
+        "country_policy_guard",
         "route_request",
         "retrieve_context",
         "generate_answer",
-        "memory_evaluation",
+        "output_guard",
     ]
 
 
 async def test_no_context_uses_safe_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """No retrieved context should route to the safe fallback node."""
+    """No retrieved context should route to fallback and output validation."""
     monkeypatch.setattr(
         "services.agent.nodes.retrieve",
         lambda question, k, min_score: [],
@@ -144,6 +145,7 @@ async def test_no_context_uses_safe_fallback(
     assert "couldn't find enough approved TrackFlow information" in (
         result["answer"]
     )
+    assert result["output_guard_allowed"] is True
 
     executed_nodes = [
         event["node"]
@@ -151,13 +153,14 @@ async def test_no_context_uses_safe_fallback(
     ]
 
     assert executed_nodes == [
-        "resolve_pending_memory",
         "validate_question",
-        "recall_memory",
+        "guard_input",
+        "tracking_authorization",
+        "country_policy_guard",
         "route_request",
         "retrieve_context",
         "no_context",
-        "memory_evaluation",
+        "output_guard",
     ]
 
 
@@ -233,10 +236,9 @@ async def test_checkpoint_can_be_inspected_after_run(
     )
 
     monkeypatch.setattr(
-        "services.agent.nodes.generate_with_memory",
-        lambda **kwargs: (
-            "The standard return window is 30 days from delivery.",
-            None,
+        "services.agent.nodes.generate_answer",
+        lambda question, context: (
+            "The standard return window is 30 days from delivery."
         ),
     )
 
@@ -252,7 +254,7 @@ async def test_checkpoint_can_be_inspected_after_run(
 
     config = {
         "configurable": {
-            "thread_id": result["conversation_id"],
+            "thread_id": result["run_id"],
         }
     }
 
@@ -264,7 +266,9 @@ async def test_checkpoint_can_be_inspected_after_run(
     assert checkpoint.values["answer"] == (
         "The standard return window is 30 days from delivery."
     )
+    assert checkpoint.values["output_guard_allowed"] is True
     assert "30 days from delivery" in checkpoint.values["context"]
+
 
 async def test_ticket_question_routes_to_live_tool(
     monkeypatch: pytest.MonkeyPatch,
@@ -324,6 +328,7 @@ async def test_ticket_question_routes_to_live_tool(
     assert result["route"] == "ticket"
     assert result["incident_id"] == 1
     assert "in progress" in result["answer"]
+    assert result["output_guard_allowed"] is True
 
     executed_nodes = [
         event["node"]
@@ -331,13 +336,14 @@ async def test_ticket_question_routes_to_live_tool(
     ]
 
     assert executed_nodes == [
-        "resolve_pending_memory",
         "validate_question",
-        "recall_memory",
+        "guard_input",
+        "tracking_authorization",
+        "country_policy_guard",
         "route_request",
         "ticket_lookup",
         "generate_ticket_answer",
-        "memory_evaluation",
+        "output_guard",
     ]
 
 
@@ -364,10 +370,9 @@ async def test_policy_question_routes_to_rag(
     )
 
     monkeypatch.setattr(
-        "services.agent.nodes.generate_with_memory",
-        lambda **kwargs: (
-            "The standard return window is 30 days from delivery.",
-            None,
+        "services.agent.nodes.generate_answer",
+        lambda question, context: (
+            "The standard return window is 30 days from delivery."
         ),
     )
 
@@ -399,6 +404,7 @@ async def test_policy_question_routes_to_rag(
 
     assert result["route"] == "rag"
     assert "30 days" in result["answer"]
+    assert result["output_guard_allowed"] is True
 
     executed_nodes = [
         event["node"]
@@ -406,20 +412,21 @@ async def test_policy_question_routes_to_rag(
     ]
 
     assert executed_nodes == [
-        "resolve_pending_memory",
         "validate_question",
-        "recall_memory",
+        "guard_input",
+        "tracking_authorization",
+        "country_policy_guard",
         "route_request",
         "retrieve_context",
         "generate_answer",
-        "memory_evaluation",
+        "output_guard",
     ]
 
 
 async def test_ticket_tool_failure_routes_to_fallback(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """A failed incident call should recover through the fallback node."""
+    """A failed incident call should recover and validate the fallback."""
     from services.agent.tools import TicketLookupResult
 
     async def fake_lookup_ticket(payload):
@@ -454,6 +461,7 @@ async def test_ticket_tool_failure_routes_to_fallback(
     assert result["answer"] == (
         "The incident service is currently unavailable."
     )
+    assert result["output_guard_allowed"] is True
 
     executed_nodes = [
         event["node"]
@@ -461,11 +469,12 @@ async def test_ticket_tool_failure_routes_to_fallback(
     ]
 
     assert executed_nodes == [
-        "resolve_pending_memory",
         "validate_question",
-        "recall_memory",
+        "guard_input",
+        "tracking_authorization",
+        "country_policy_guard",
         "route_request",
         "ticket_lookup",
         "ticket_fallback",
-        "memory_evaluation",
+        "output_guard",
     ]
