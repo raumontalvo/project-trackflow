@@ -81,11 +81,6 @@ def health_check() -> dict[str, str]:
 
 @app.get("/health")
 def health() -> dict[str, str]:
-    return {"status": "ok"}
-
-
-@app.get("/health")
-def health() -> dict[str, str]:
     """Basic service health endpoint."""
     return {"status": "ok"}
 
