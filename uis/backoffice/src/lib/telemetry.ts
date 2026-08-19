@@ -1,0 +1,247 @@
+"use client";
+
+const TELEMETRY_ENDPOINT =
+  process.env.NEXT_PUBLIC_TELEMETRY_ENDPOINT ||
+  "http://localhost:8000/telemetry/events";
+
+const SCHEMA_VERSION = "1.0";
+const MAX_BATCH_SIZE = 20;
+const FLUSH_INTERVAL_MS = 10_000;
+const MAX_ATTEMPTS = 3;
+
+export type TelemetryProperties = Record<string, unknown>;
+
+export type TelemetryEvent = {
+  eventId: string;
+  timestamp: string;
+  sessionId: string;
+  userId: string;
+  event_type: string;
+  schemaVersion: string;
+  requestId: string;
+  properties: TelemetryProperties;
+};
+
+let queue: Omit<TelemetryEvent, "requestId">[] = [];
+let flushTimer: number | null = null;
+let listenersRegistered = false;
+let flushInProgress = false;
+
+function isBrowser(): boolean {
+  return typeof window !== "undefined";
+}
+
+function getUserId(): string | null {
+  if (!isBrowser()) {
+    return null;
+  }
+
+  return localStorage.getItem("user_uuid");
+}
+
+function getSessionId(): string {
+  if (!isBrowser()) {
+    return "server";
+  }
+
+  const storageKey = "telemetry_session_id";
+  const existingSessionId = sessionStorage.getItem(storageKey);
+
+  if (existingSessionId) {
+    return existingSessionId;
+  }
+
+  const sessionId = crypto.randomUUID();
+  sessionStorage.setItem(storageKey, sessionId);
+
+  return sessionId;
+}
+
+function createEvent(
+  eventType: string,
+  properties: TelemetryProperties
+): Omit<TelemetryEvent, "requestId"> | null {
+  const userId = getUserId();
+
+  if (!userId) {
+    console.warn(
+      "Telemetry event skipped because user_uuid is not available.",
+      eventType
+    );
+    return null;
+  }
+
+  return {
+    eventId: crypto.randomUUID(),
+    timestamp: new Date().toISOString(),
+    sessionId: getSessionId(),
+    userId,
+    event_type: eventType,
+    schemaVersion: SCHEMA_VERSION,
+    properties,
+  };
+}
+
+function attachRequestId(
+  events: Omit<TelemetryEvent, "requestId">[]
+): TelemetryEvent[] {
+  const requestId = crypto.randomUUID();
+
+  return events.map((event) => ({
+    ...event,
+    requestId,
+  }));
+}
+
+function delay(milliseconds: number): Promise<void> {
+  return new Promise((resolve) => {
+    window.setTimeout(resolve, milliseconds);
+  });
+}
+
+async function sendBatch(
+  batch: TelemetryEvent[],
+  attempt = 1
+): Promise<void> {
+  try {
+    const response = await fetch(TELEMETRY_ENDPOINT, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ events: batch }),
+      keepalive: true,
+    });
+
+    if (!response.ok) {
+      throw new Error(
+        `Telemetry endpoint returned status ${response.status}`
+      );
+    }
+  } catch (error) {
+    if (attempt >= MAX_ATTEMPTS) {
+      console.warn(
+        "Telemetry batch discarded after maximum retry attempts.",
+        error
+      );
+      return;
+    }
+
+    const backoffMs = 1_000 * 2 ** (attempt - 1);
+    await delay(backoffMs);
+    await sendBatch(batch, attempt + 1);
+  }
+}
+
+export async function flush(): Promise<void> {
+  if (!isBrowser() || flushInProgress || queue.length === 0) {
+    return;
+  }
+
+  flushInProgress = true;
+
+  const pendingEvents = queue;
+  queue = [];
+
+  const batch = attachRequestId(pendingEvents);
+
+  try {
+    await sendBatch(batch);
+  } finally {
+    flushInProgress = false;
+
+    if (queue.length >= MAX_BATCH_SIZE) {
+      void flush();
+    }
+  }
+}
+
+function flushWithBeacon(): void {
+  if (!isBrowser() || queue.length === 0) {
+    return;
+  }
+
+  const pendingEvents = queue;
+  queue = [];
+
+  const batch = attachRequestId(pendingEvents);
+  const payload = JSON.stringify({ events: batch });
+  const blob = new Blob([payload], {
+    type: "application/json",
+  });
+
+  const accepted = navigator.sendBeacon(
+    TELEMETRY_ENDPOINT,
+    blob
+  );
+
+  if (!accepted) {
+    queue = pendingEvents.concat(queue);
+  }
+}
+
+function registerLifecycleListeners(): void {
+  if (!isBrowser() || listenersRegistered) {
+    return;
+  }
+
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") {
+      flushWithBeacon();
+    }
+  });
+
+  window.addEventListener("pagehide", () => {
+    flushWithBeacon();
+  });
+
+  listenersRegistered = true;
+}
+
+export function startTelemetryService(): void {
+  if (!isBrowser()) {
+    return;
+  }
+
+  registerLifecycleListeners();
+
+  if (flushTimer) {
+    return;
+  }
+
+  flushTimer = window.setInterval(() => {
+    void flush();
+  }, FLUSH_INTERVAL_MS);
+}
+
+export function stopTelemetryService(): void {
+  if (!isBrowser() || !flushTimer) {
+    return;
+  }
+
+  window.clearInterval(flushTimer);
+  flushTimer = null;
+}
+
+export function track(
+  eventType: string,
+  properties: TelemetryProperties = {}
+): void {
+  if (!isBrowser()) {
+    return;
+  }
+
+  startTelemetryService();
+
+  const event = createEvent(eventType, properties);
+
+  if (!event) {
+    return;
+  }
+
+  queue.push(event);
+
+  if (queue.length >= MAX_BATCH_SIZE) {
+    void flush();
+  }
+}

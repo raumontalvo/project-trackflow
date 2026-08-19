@@ -6,17 +6,26 @@ import { useRouter } from "next/navigation";
 const API =
   process.env.NEXT_PUBLIC_INVENTORY_API_URL || "http://localhost:8000";
 
+type LoginResponse = {
+  access_token: string;
+  token_type: string;
+  user_uuid: string;
+};
+
+type ErrorResponse = {
+  detail?: string;
+};
+
 export default function LoginPage() {
   const router = useRouter();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
+  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
 
     setLoading(true);
     setError("");
@@ -34,13 +43,28 @@ export default function LoginPage() {
         body: form.toString(),
       });
 
-      const data = await response.json();
+      const data = (await response.json()) as LoginResponse | ErrorResponse;
 
       if (!response.ok) {
-        throw new Error(data.detail || "Login failed.");
+        const message =
+          "detail" in data && typeof data.detail === "string"
+            ? data.detail
+            : "Login failed.";
+
+        throw new Error(message);
+      }
+
+      if (
+        !("access_token" in data) ||
+        !("user_uuid" in data) ||
+        typeof data.access_token !== "string" ||
+        typeof data.user_uuid !== "string"
+      ) {
+        throw new Error("The login response is missing required fields.");
       }
 
       localStorage.setItem("access_token", data.access_token);
+      localStorage.setItem("user_uuid", data.user_uuid);
 
       router.push("/backoffice/inventory/products");
     } catch (err) {
@@ -85,8 +109,9 @@ export default function LoginPage() {
           type="email"
           placeholder="Email"
           required
+          autoComplete="email"
           value={email}
-          onChange={(e) => setEmail(e.target.value)}
+          onChange={(event) => setEmail(event.target.value)}
           style={{
             padding: 12,
           }}
@@ -96,8 +121,9 @@ export default function LoginPage() {
           type="password"
           placeholder="Password"
           required
+          autoComplete="current-password"
           value={password}
-          onChange={(e) => setPassword(e.target.value)}
+          onChange={(event) => setPassword(event.target.value)}
           style={{
             padding: 12,
           }}
@@ -109,7 +135,7 @@ export default function LoginPage() {
           style={{
             padding: 12,
             fontWeight: 700,
-            cursor: "pointer",
+            cursor: loading ? "not-allowed" : "pointer",
           }}
         >
           {loading ? "Signing In..." : "Sign In"}

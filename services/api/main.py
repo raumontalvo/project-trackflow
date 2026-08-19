@@ -24,6 +24,7 @@ from services.api.routes.chat import router as chat_router
 from services.api.routes.incidents import router as incidents_router
 from services.api.routes.inventory import router as inventory_router
 from services.api.routes.suppliers import router as suppliers_router
+from services.api.routes.telemetry import router as telemetry_router
 from services.api.routes.users_routes import router as users_router
 
 app = FastAPI(
@@ -49,6 +50,7 @@ app.include_router(users_router)
 app.include_router(suppliers_router)
 app.include_router(incidents_router)
 app.include_router(inventory_router)
+app.include_router(telemetry_router)
 
 
 @app.on_event("startup")

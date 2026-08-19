@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from uuid import uuid4
 
 from tinydb import Query
 
@@ -17,10 +18,12 @@ def serialize_user(user: dict, user_id: int) -> dict:
 
 def create_user(email: str, password: str) -> dict:
     existing_user = users_table.get(UserQuery.email == email)
+
     if existing_user:
         raise ValueError("Email already registered")
 
     user_data = {
+        "uuid": str(uuid4()),
         "name": "",
         "email": email,
         "hashed_password": hash_password(password),
@@ -34,20 +37,25 @@ def create_user(email: str, password: str) -> dict:
 
 def get_user_by_id(user_id: int) -> dict | None:
     user = users_table.get(doc_id=user_id)
+
     if not user:
         return None
+
     return serialize_user(user, user_id)
 
 
 def get_user_by_email(email: str) -> dict | None:
     user = users_table.get(UserQuery.email == email)
+
     if not user:
         return None
+
     return serialize_user(user, user.doc_id)
 
 
 def get_user_with_password_by_email(email: str) -> dict | None:
     user = users_table.get(UserQuery.email == email)
+
     if not user:
         return None
 
@@ -57,11 +65,15 @@ def get_user_with_password_by_email(email: str) -> dict | None:
 
 
 def list_users() -> list[dict]:
-    return [serialize_user(user, user.doc_id) for user in users_table.all()]
+    return [
+        serialize_user(user, user.doc_id)
+        for user in users_table.all()
+    ]
 
 
 def update_user(user_id: int, data: dict) -> dict | None:
     user = users_table.get(doc_id=user_id)
+
     if not user:
         return None
 
@@ -80,7 +92,12 @@ def update_user(user_id: int, data: dict) -> dict | None:
         update_data["is_active"] = data["is_active"]
 
     users_table.update(update_data, doc_ids=[user_id])
+
     updated_user = users_table.get(doc_id=user_id)
+
+    if not updated_user:
+        return None
+
     return serialize_user(updated_user, user_id)
 
 
