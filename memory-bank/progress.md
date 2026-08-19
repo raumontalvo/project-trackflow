@@ -46,3 +46,16 @@
 - Commit and push `milestone-4`.
 - Update or create the pull request against `main`.
 - Add current website and backoffice screenshots to the pull-request description.
+
+## Integration And Live Verification (2026-08-19)
+
+- Integrated the audited branch queue into `integration/pre-main-live-qa`.
+- Opened draft PR for controlled promotion to `main`:
+	- https://github.com/raumontalvo/project-trackflow/pull/13
+- Added release verification artifacts:
+	- `.release/live-verification.md`
+	- `scripts/verify-live-site.sh`
+- Ran route checks against `http://127.0.0.1:6060`:
+	- `/index.html`, `/application.html`, `/es/index.html`, `/es/application.html` all returned HTTP 200.
+- Installed Chromium runtime dependencies and executed Lighthouse gate successfully.
+- Recorded updated Lighthouse result snapshots under `.lighthouse-gate-results/`.
