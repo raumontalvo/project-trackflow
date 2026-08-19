@@ -1,4 +1,4 @@
-"""Minimal state shared between TrackFlow LangGraph agent nodes."""
+"""Explicit state shared between TrackFlow LangGraph agent nodes."""
 
 from __future__ import annotations
 
@@ -9,6 +9,7 @@ class AgentState(TypedDict, total=False):
     """Explicit state passed between LangGraph nodes."""
 
     question: str
+    conversation_id: str
     chunks: list[dict[str, Any]]
     context: str
     answer: str
@@ -18,3 +19,11 @@ class AgentState(TypedDict, total=False):
     route: Literal["rag", "ticket", "both"]
     incident_id: int | None
     ticket_result: dict[str, Any] | None
+
+    memory_proposal: dict[str, Any] | None
+    memory_decision: dict[str, Any] | None
+    memory_status: str | None
+    memory_notice: str
+
+    recalled_memories: list[dict[str, Any]]
+    memory_context: str

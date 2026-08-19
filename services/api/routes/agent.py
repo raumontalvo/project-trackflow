@@ -20,12 +20,20 @@ class AgentQueryRequest(BaseModel):
         max_length=1000,
         examples=["What is the standard return window?"],
     )
+    conversation_id: str | None = Field(
+        default=None,
+        description=(
+            "Stable conversation identifier. Reuse the returned value "
+            "on later turns to continue the same agent conversation."
+        ),
+    )
 
 
 class AgentQueryResponse(BaseModel):
     """Final response returned by the LangGraph agent."""
 
     run_id: str
+    conversation_id: str
     answer: str
     error: str | None = None
 
@@ -36,10 +44,14 @@ async def ask_agent(
 ) -> AgentQueryResponse:
     """Run the compiled TrackFlow LangGraph agent."""
     try:
-        result = await run_agent(request.question)
+        result = await run_agent(
+            request.question,
+            conversation_id=request.conversation_id,
+        )
 
         return AgentQueryResponse(
             run_id=result["run_id"],
+            conversation_id=result["conversation_id"],
             answer=result.get("answer", ""),
             error=result.get("error"),
         )
@@ -55,4 +67,3 @@ async def ask_agent(
             status_code=500,
             detail="The TrackFlow agent could not answer the question.",
         ) from exc
-        

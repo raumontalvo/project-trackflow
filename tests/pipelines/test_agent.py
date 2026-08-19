@@ -64,9 +64,10 @@ async def test_valid_question_retrieves_then_generates(
     )
 
     monkeypatch.setattr(
-        "services.agent.nodes.generate_answer",
-        lambda question, context: (
-            "The standard return window is 30 days from delivery."
+        "services.agent.nodes.generate_with_memory",
+        lambda **kwargs: (
+            "The standard return window is 30 days from delivery.",
+            None,
         ),
     )
 
@@ -95,10 +96,13 @@ async def test_valid_question_retrieves_then_generates(
     ]
 
     assert executed_nodes == [
+        "resolve_pending_memory",
         "validate_question",
+        "recall_memory",
         "route_request",
         "retrieve_context",
         "generate_answer",
+        "memory_evaluation",
     ]
 
 
@@ -147,10 +151,13 @@ async def test_no_context_uses_safe_fallback(
     ]
 
     assert executed_nodes == [
+        "resolve_pending_memory",
         "validate_question",
+        "recall_memory",
         "route_request",
         "retrieve_context",
         "no_context",
+        "memory_evaluation",
     ]
 
 
@@ -226,9 +233,10 @@ async def test_checkpoint_can_be_inspected_after_run(
     )
 
     monkeypatch.setattr(
-        "services.agent.nodes.generate_answer",
-        lambda question, context: (
-            "The standard return window is 30 days from delivery."
+        "services.agent.nodes.generate_with_memory",
+        lambda **kwargs: (
+            "The standard return window is 30 days from delivery.",
+            None,
         ),
     )
 
@@ -244,7 +252,7 @@ async def test_checkpoint_can_be_inspected_after_run(
 
     config = {
         "configurable": {
-            "thread_id": result["run_id"],
+            "thread_id": result["conversation_id"],
         }
     }
 
@@ -323,10 +331,13 @@ async def test_ticket_question_routes_to_live_tool(
     ]
 
     assert executed_nodes == [
+        "resolve_pending_memory",
         "validate_question",
+        "recall_memory",
         "route_request",
         "ticket_lookup",
         "generate_ticket_answer",
+        "memory_evaluation",
     ]
 
 
@@ -353,9 +364,10 @@ async def test_policy_question_routes_to_rag(
     )
 
     monkeypatch.setattr(
-        "services.agent.nodes.generate_answer",
-        lambda question, context: (
-            "The standard return window is 30 days from delivery."
+        "services.agent.nodes.generate_with_memory",
+        lambda **kwargs: (
+            "The standard return window is 30 days from delivery.",
+            None,
         ),
     )
 
@@ -394,10 +406,13 @@ async def test_policy_question_routes_to_rag(
     ]
 
     assert executed_nodes == [
+        "resolve_pending_memory",
         "validate_question",
+        "recall_memory",
         "route_request",
         "retrieve_context",
         "generate_answer",
+        "memory_evaluation",
     ]
 
 
@@ -446,8 +461,11 @@ async def test_ticket_tool_failure_routes_to_fallback(
     ]
 
     assert executed_nodes == [
+        "resolve_pending_memory",
         "validate_question",
+        "recall_memory",
         "route_request",
         "ticket_lookup",
         "ticket_fallback",
+        "memory_evaluation",
     ]
