@@ -31,12 +31,12 @@ class AgentQueryResponse(BaseModel):
 
 
 @router.post("/query", response_model=AgentQueryResponse)
-async def ask_agent(
+def ask_agent(
     request: AgentQueryRequest,
 ) -> AgentQueryResponse:
     """Run the compiled TrackFlow LangGraph agent."""
     try:
-        result = await run_agent(request.question)
+        result = run_agent(request.question)
 
         return AgentQueryResponse(
             run_id=result["run_id"],
@@ -55,3 +55,4 @@ async def ask_agent(
             status_code=500,
             detail="The TrackFlow agent could not answer the question.",
         ) from exc
+        

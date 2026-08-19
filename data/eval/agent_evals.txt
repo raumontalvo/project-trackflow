@@ -1,0 +1,29 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.1, pytest-9.1.1, pluggy-1.6.0 -- /workspaces/project-3/.venv/bin/python3
+cachedir: .pytest_cache
+rootdir: /workspaces/project-3
+configfile: pyproject.toml
+plugins: cov-7.1.0, anyio-4.12.1, langsmith-0.10.16
+collecting ... collected 19 items
+
+tests/pipelines/test_agent.py::test_invalid_question_stops_before_retrieval PASSED [  5%]
+tests/pipelines/test_agent.py::test_valid_question_retrieves_then_generates PASSED [ 10%]
+tests/pipelines/test_agent.py::test_no_context_uses_safe_fallback PASSED [ 15%]
+tests/pipelines/test_agent.py::test_trace_file_is_queryable PASSED       [ 21%]
+tests/pipelines/test_agent.py::test_checkpoint_can_be_inspected_after_run PASSED [ 26%]
+tests/pipelines/test_agent_trace_evals.py::test_saved_trace_retrieves_before_generation PASSED [ 31%]
+tests/pipelines/test_agent_trace_evals.py::test_saved_trace_uses_separate_retrieval_and_generation_nodes PASSED [ 36%]
+tests/pipelines/test_agent_trace_evals.py::test_saved_trace_answer_is_grounded_in_returns_policy PASSED [ 42%]
+tests/pipelines/test_rag.py::test_load_chunks_covers_all_documents PASSED [ 47%]
+tests/pipelines/test_rag.py::test_each_document_has_at_least_three_chunks PASSED [ 52%]
+tests/pipelines/test_rag.py::test_deterministic_point_id_is_stable PASSED [ 57%]
+tests/pipelines/test_rag.py::test_embed_rejects_empty_text PASSED        [ 63%]
+tests/pipelines/test_rag.py::test_retrieve_returns_normalized_results PASSED [ 68%]
+tests/pipelines/test_rag.py::test_query_generates_answer_from_retrieved_context PASSED [ 73%]
+tests/pipelines/test_rag.py::test_query_returns_safe_fallback_when_no_chunks PASSED [ 78%]
+tests/pipelines/test_rag.py::test_retrieve_passes_min_score_to_qdrant PASSED [ 84%]
+tests/pipelines/test_rag.py::test_retrieve_can_return_fewer_than_k_results PASSED [ 89%]
+tests/pipelines/test_sales_split.py::test_sales_data_uses_first_8_years_for_training_and_last_2_for_test PASSED [ 94%]
+tests/pipelines/test_time_series_cv.py::test_time_series_split_never_uses_future_data_for_training PASSED [100%]
+
+============================== 19 passed in 5.37s ==============================
