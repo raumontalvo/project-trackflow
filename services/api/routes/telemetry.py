@@ -1,6 +1,7 @@
 import logging
 import os
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from time import monotonic
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,8 @@ from sqlmodel import Session
 
 from services.api.database import get_db
 from services.api.models import TelemetryEventRecord
+from services.telemetry.analysis import generate_technical_report
+
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +20,13 @@ TELEMETRY_ENDPOINT = os.getenv(
     "TELEMETRY_ENDPOINT",
     "/telemetry/events",
 )
+
+REPORT_CACHE_TTL_SECONDS = 60
+
+REPORT_CACHE: dict[
+    tuple[str, str],
+    tuple[float, dict[str, Any]],
+] = {}
 
 router = APIRouter(prefix="/telemetry", tags=["telemetry"])
 
@@ -34,11 +44,10 @@ class TelemetryEvent(BaseModel):
 
 class TelemetryBatchEnvelope(BaseModel):
     """
-    The batch envelope is validated here, but each event stays unvalidated
-    until the endpoint loops over it.
+    Validate the batch envelope while allowing each event to be
+    validated independently.
 
-    This enables partial acceptance:
-    one invalid event does not reject the entire batch.
+    One invalid event does not reject the entire batch.
     """
 
     events: list[Any]
@@ -54,7 +63,6 @@ TRACKFLOW_INVENTORY_EVENTS = {
 
 
 EVENT_PROPERTY_ALLOWLISTS: dict[str, set[str]] = {
-    # Authoritative TrackFlow inventory events
     "inbound_order_created": {
         "warehouse",
         "client_id",
@@ -100,9 +108,6 @@ EVENT_PROPERTY_ALLOWLISTS: dict[str, set[str]] = {
         "discrepancy_quantity",
         "created_by",
     },
-
-    # Existing event names from the previous telemetry phase.
-    # These remain accepted so the frontend does not need to change.
     "receiving_order_created": {
         "receiving_order_id",
         "sku_id",
@@ -183,16 +188,21 @@ FORBIDDEN_PROPERTY_KEYS = {
 }
 
 
-def validate_trackflow_inventory_event(event: TelemetryEvent) -> None:
+def validate_trackflow_inventory_event(
+    event: TelemetryEvent,
+) -> None:
     """
-    Validate the minimum TrackFlow dimensions for the five authoritative
-    inventory event types without modifying the existing Pydantic model.
+    Validate the required TrackFlow dimensions for authoritative
+    inventory event types.
     """
 
     if event.event_type not in TRACKFLOW_INVENTORY_EVENTS:
         return
 
-    missing = TRACKFLOW_REQUIRED_PROPERTIES - event.properties.keys()
+    missing = (
+        TRACKFLOW_REQUIRED_PROPERTIES
+        - event.properties.keys()
+    )
 
     if missing:
         raise ValueError(
@@ -210,7 +220,8 @@ def validate_trackflow_inventory_event(event: TelemetryEvent) -> None:
 
     if product_category not in VALID_PRODUCT_CATEGORIES:
         raise ValueError(
-            "product_category must be fashion, electronics, or cosmetics"
+            "product_category must be fashion, "
+            "electronics, or cosmetics"
         )
 
     quantity = event.properties["quantity"]
@@ -225,10 +236,11 @@ def validate_trackflow_inventory_event(event: TelemetryEvent) -> None:
         )
 
 
-def build_tags(event: TelemetryEvent) -> dict[str, Any]:
+def build_tags(
+    event: TelemetryEvent,
+) -> dict[str, Any]:
     """
     Copy only approved properties into the JSONB tags column.
-    Arbitrary frontend properties are never persisted.
     """
 
     forbidden_found = (
@@ -238,10 +250,13 @@ def build_tags(event: TelemetryEvent) -> dict[str, Any]:
 
     if forbidden_found:
         raise ValueError(
-            f"Forbidden properties found: {sorted(forbidden_found)}"
+            "Forbidden properties found: "
+            f"{sorted(forbidden_found)}"
         )
 
-    allowed_keys = EVENT_PROPERTY_ALLOWLISTS.get(event.event_type)
+    allowed_keys = EVENT_PROPERTY_ALLOWLISTS.get(
+        event.event_type
+    )
 
     if allowed_keys is None:
         raise ValueError(
@@ -258,6 +273,10 @@ def build_tags(event: TelemetryEvent) -> dict[str, Any]:
 def map_event_to_row(
     event: TelemetryEvent,
 ) -> dict[str, Any]:
+    """
+    Convert one validated telemetry event into a database row.
+    """
+
     validate_trackflow_inventory_event(event)
 
     return {
@@ -270,6 +289,77 @@ def map_event_to_row(
         "request_id": event.requestId,
         "tags": build_tags(event),
     }
+
+
+def ensure_utc(
+    value: datetime,
+) -> datetime:
+    """
+    Convert a datetime to a timezone-aware UTC datetime.
+
+    ISO-8601 query values without an explicit timezone are interpreted
+    as UTC.
+    """
+
+    if value.tzinfo is None:
+        return value.replace(tzinfo=timezone.utc)
+
+    return value.astimezone(timezone.utc)
+
+
+def resolve_report_period(
+    start_date: datetime | None,
+    end_date: datetime | None,
+) -> tuple[datetime, datetime]:
+    """
+    Resolve the report window once at the endpoint boundary.
+
+    The default window covers the previous seven days in UTC.
+    SQL uses an inclusive start and exclusive end.
+    """
+
+    resolved_end = ensure_utc(
+        end_date or datetime.now(timezone.utc)
+    )
+
+    resolved_start = ensure_utc(
+        start_date
+        or resolved_end - timedelta(days=7)
+    )
+
+    if resolved_start >= resolved_end:
+        raise HTTPException(
+            status_code=400,
+            detail="start_date must be earlier than end_date",
+        )
+
+    return resolved_start, resolved_end
+
+
+def build_report_cache_key(
+    start_date: datetime | None,
+    end_date: datetime | None,
+) -> tuple[str, str]:
+    """
+    Build a stable cache key from the requested query parameters.
+
+    Omitted parameters use stable default markers so repeated requests
+    without dates can use the same cached report during the TTL.
+    """
+
+    start_key = (
+        ensure_utc(start_date).isoformat()
+        if start_date is not None
+        else "__default_start__"
+    )
+
+    end_key = (
+        ensure_utc(end_date).isoformat()
+        if end_date is not None
+        else "__default_end__"
+    )
+
+    return start_key, end_key
 
 
 @router.post("/events")
@@ -292,7 +382,11 @@ def receive_telemetry(
             row = map_event_to_row(event)
             rows.append(row)
 
-        except (ValidationError, TypeError, ValueError) as error:
+        except (
+            ValidationError,
+            TypeError,
+            ValueError,
+        ) as error:
             rejected += 1
 
             logger.warning(
@@ -309,7 +403,6 @@ def receive_telemetry(
                 TelemetryEventRecord.__table__
             )
 
-            # One INSERT statement for every valid event in the batch.
             db.execute(statement, rows)
             db.commit()
 
@@ -328,7 +421,8 @@ def receive_telemetry(
             ) from error
 
     logger.info(
-        "Telemetry batch processed: received=%s stored=%s rejected=%s",
+        "Telemetry batch processed: "
+        "received=%s stored=%s rejected=%s",
         received,
         stored,
         rejected,
@@ -339,3 +433,51 @@ def receive_telemetry(
         "stored": stored,
         "rejected": rejected,
     }
+
+
+@router.get("/report")
+def get_telemetry_report(
+    start_date: datetime | None = None,
+    end_date: datetime | None = None,
+    db: Session = Depends(get_db),
+) -> dict[str, Any]:
+    """
+    Return the technical telemetry report.
+
+    The endpoint resolves the period once, passes it to every metric,
+    and caches reports for 60 seconds.
+    """
+
+    cache_key = build_report_cache_key(
+        start_date,
+        end_date,
+    )
+
+    current_time = monotonic()
+    cached_entry = REPORT_CACHE.get(cache_key)
+
+    if cached_entry is not None:
+        expires_at, cached_report = cached_entry
+
+        if current_time < expires_at:
+            return cached_report
+
+        REPORT_CACHE.pop(cache_key, None)
+
+    resolved_start, resolved_end = resolve_report_period(
+        start_date,
+        end_date,
+    )
+
+    report = generate_technical_report(
+        db,
+        resolved_start,
+        resolved_end,
+    )
+
+    REPORT_CACHE[cache_key] = (
+        current_time + REPORT_CACHE_TTL_SECONDS,
+        report,
+    )
+
+    return report

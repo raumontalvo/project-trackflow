@@ -2,39 +2,24 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
+
 import {
   createInboundOrder,
   getInventoryProducts,
   type InventoryProduct,
   type Warehouse,
 } from "@/lib/inventory";
-import { track } from "@/lib/telemetry";
+import { flush, track } from "@/lib/telemetry";
 
-function getTelemetryErrorCode(error: unknown): string {
-  if (!(error instanceof Error)) {
-    return "unknown_error";
-  }
 
-  const message = error.message.toLowerCase();
-
-  if (message.includes("logged in") || message.includes("unauthorized")) {
-    return "unauthorized";
-  }
-
-  if (message.includes("validation")) {
-    return "validation_error";
-  }
-
-  if (
-    message.includes("network") ||
-    message.includes("fetch") ||
-    message.includes("failed to connect")
-  ) {
-    return "network_error";
-  }
-
-  return "inventory_api_error";
+function telemetryWarehouse(
+  warehouse: Warehouse
+): "los_angeles" | "zaragoza" {
+  return warehouse === "LA"
+    ? "los_angeles"
+    : "zaragoza";
 }
+
 
 export default function InboundOrderPage() {
   const [products, setProducts] = useState<InventoryProduct[]>([]);
@@ -57,7 +42,9 @@ export default function InboundOrderPage() {
         setProducts(data);
       } catch (err) {
         setError(
-          err instanceof Error ? err.message : "Failed to load products."
+          err instanceof Error
+            ? err.message
+            : "Failed to load products."
         );
       } finally {
         setLoading(false);
@@ -67,46 +54,68 @@ export default function InboundOrderPage() {
     void loadProducts();
   }, []);
 
-  async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    event: React.FormEvent<HTMLFormElement>
+  ) {
     event.preventDefault();
+
     setError("");
     setSuccess("");
 
     if (!skuId) {
-      setError("Choose a SKU before registering the inbound delivery.");
+      setError(
+        "Choose a SKU before registering the inbound delivery."
+      );
       return;
     }
 
-    const telemetryProperties = {
-      sku_id: Number(skuId),
-      quantity: Number(quantity),
-      warehouse,
-      reference,
-    };
+    const selectedProduct = products.find(
+      (product) => product.id === Number(skuId)
+    );
+
+    if (!selectedProduct) {
+      setError("The selected product could not be found.");
+      return;
+    }
+
+    const numericQuantity = Number(quantity);
+
+    if (
+      !Number.isInteger(numericQuantity) ||
+      numericQuantity <= 0
+    ) {
+      setError("Quantity must be a positive whole number.");
+      return;
+    }
 
     try {
       setSubmitting(true);
 
       await createInboundOrder({
-        sku_id: telemetryProperties.sku_id,
-        quantity: telemetryProperties.quantity,
-        reference: telemetryProperties.reference,
-        warehouse: telemetryProperties.warehouse,
+        sku_id: selectedProduct.id,
+        quantity: numericQuantity,
+        reference,
+        warehouse,
       });
 
-      track("stock_entry_created", telemetryProperties);
+      track("inbound_order_created", {
+        warehouse: telemetryWarehouse(warehouse),
+        client_id: selectedProduct.client_name,
+        product_id: selectedProduct.sku,
+        product_category: selectedProduct.category,
+        quantity: numericQuantity,
+      });
+
+      await flush();
 
       setSkuId("");
       setQuantity("");
       setReference("");
       setWarehouse("LA");
-      setSuccess("Inbound delivery registered successfully.");
+      setSuccess(
+        "Inbound delivery registered successfully."
+      );
     } catch (err) {
-      track("stock_entry_failed", {
-        error_code: getTelemetryErrorCode(err),
-        warehouse,
-      });
-
       setError(
         err instanceof Error
           ? err.message
@@ -118,18 +127,35 @@ export default function InboundOrderPage() {
   }
 
   return (
-    <main style={{ padding: "32px", maxWidth: "760px", margin: "0 auto" }}>
+    <main
+      style={{
+        padding: "32px",
+        maxWidth: "760px",
+        margin: "0 auto",
+      }}
+    >
       <header style={{ marginBottom: "24px" }}>
-        <p style={{ color: "#6b7280", marginBottom: "8px" }}>
+        <p
+          style={{
+            color: "#6b7280",
+            marginBottom: "8px",
+          }}
+        >
           TrackFlow Warehouse Operations
         </p>
 
-        <h1 style={{ fontSize: "32px", marginBottom: "8px" }}>
+        <h1
+          style={{
+            fontSize: "32px",
+            marginBottom: "8px",
+          }}
+        >
           Register Inbound Delivery
         </h1>
 
         <p style={{ color: "#6b7280" }}>
-          Log stock received into the Los Angeles or Zaragoza warehouse.
+          Log stock received into the Los Angeles or Zaragoza
+          warehouse.
         </p>
       </header>
 
@@ -141,11 +167,17 @@ export default function InboundOrderPage() {
           flexWrap: "wrap",
         }}
       >
-        <Link href="/backoffice/inventory/products">Products</Link>
+        <Link href="/backoffice/inventory/products">
+          Products
+        </Link>
+
         <Link href="/backoffice/inventory/orders/outbound">
           Outbound Exit
         </Link>
-        <Link href="/backoffice/inventory/orders">Order History</Link>
+
+        <Link href="/backoffice/inventory/orders">
+          Order History
+        </Link>
       </nav>
 
       {loading && <p>Loading SKUs...</p>}
@@ -181,18 +213,24 @@ export default function InboundOrderPage() {
       {!loading && (
         <form
           onSubmit={handleSubmit}
-          style={{ display: "grid", gap: "16px" }}
+          style={{
+            display: "grid",
+            gap: "16px",
+          }}
         >
           <label>
             SKU Product
+
             <select
               value={skuId}
               onChange={(event) => {
                 const nextSkuId = event.target.value;
+
                 setSkuId(nextSkuId);
 
                 const selectedProduct = products.find(
-                  (product) => product.id === Number(nextSkuId)
+                  (product) =>
+                    product.id === Number(nextSkuId)
                 );
 
                 if (selectedProduct) {
@@ -206,11 +244,17 @@ export default function InboundOrderPage() {
                 marginTop: "6px",
               }}
             >
-              <option value="">Choose a product</option>
+              <option value="">
+                Choose a product
+              </option>
 
               {products.map((product) => (
-                <option key={product.id} value={product.id}>
-                  {product.name} — {product.sku} — {product.warehouse}
+                <option
+                  key={product.id}
+                  value={product.id}
+                >
+                  {product.name} — {product.sku} —{" "}
+                  {product.warehouse}
                 </option>
               ))}
             </select>
@@ -218,10 +262,13 @@ export default function InboundOrderPage() {
 
           <label>
             Warehouse
+
             <select
               value={warehouse}
               onChange={(event) =>
-                setWarehouse(event.target.value as Warehouse)
+                setWarehouse(
+                  event.target.value as Warehouse
+                )
               }
               required
               style={{
@@ -230,18 +277,27 @@ export default function InboundOrderPage() {
                 marginTop: "6px",
               }}
             >
-              <option value="LA">Los Angeles Warehouse</option>
-              <option value="ZGZ">Zaragoza Warehouse</option>
+              <option value="LA">
+                Los Angeles Warehouse
+              </option>
+
+              <option value="ZGZ">
+                Zaragoza Warehouse
+              </option>
             </select>
           </label>
 
           <label>
             Quantity Received
+
             <input
               type="number"
               min="1"
+              step="1"
               value={quantity}
-              onChange={(event) => setQuantity(event.target.value)}
+              onChange={(event) =>
+                setQuantity(event.target.value)
+              }
               required
               style={{
                 width: "100%",
@@ -253,9 +309,12 @@ export default function InboundOrderPage() {
 
           <label>
             Delivery Reference
+
             <input
               value={reference}
-              onChange={(event) => setReference(event.target.value)}
+              onChange={(event) =>
+                setReference(event.target.value)
+              }
               required
               placeholder="Supplier delivery note, email reference, or warehouse receipt"
               style={{
@@ -272,7 +331,9 @@ export default function InboundOrderPage() {
             style={{
               padding: "12px 16px",
               fontWeight: 700,
-              cursor: submitting ? "not-allowed" : "pointer",
+              cursor: submitting
+                ? "not-allowed"
+                : "pointer",
             }}
           >
             {submitting
