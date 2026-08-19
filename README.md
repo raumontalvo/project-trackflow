@@ -92,3 +92,50 @@ This template was built as part of the 4Geeks Academy AI Engineering Career Prog
 You can find other templates and resources like this at the [4Geeks Academy GitHub page](https://github.com/4geeksacademy).
 
 _This template is maintained by 4Geeks Academy for the AI Engineering track. For exclusive use in the programme._
+
+## Async task queue
+
+TrackFlow uses Redis as the Celery broker and result backend. CSV incident
+analysis runs in an independent Celery worker rather than inside FastAPI.
+
+### Start the queue services
+
+```bash
+docker compose up -d redis backend worker flower
+```
+
+The services are available at:
+
+- FastAPI: `http://localhost:8000`
+- Redis: `localhost:6379`
+- Flower: `http://localhost:5555`
+
+### View worker logs
+
+```bash
+docker compose logs -f worker
+```
+
+### Stop the worker
+
+```bash
+docker compose stop worker
+```
+
+Stopping FastAPI does not stop the worker or remove messages already queued in
+Redis.
+
+### Restart the worker
+
+```bash
+docker compose start worker
+```
+
+### Stop all queue services
+
+```bash
+docker compose down
+```
+
+The Redis connection is configured through the `REDIS_URL` environment
+variable.

@@ -1,4 +1,19 @@
+.env
+.venv/
 __pycache__/
 *.pyc
-.env
-.env
+*.py[cod]
+.pytest_cache/
+.coverage
+htmlcov/
+.DS_Store
+
+# Local TrackFlow runtime data
+services/api/suppliers_db.json
+
+# Agent memory runtime data
+data/agent_memory/
+
+# RFP intake runtime/test PDFs
+data/raw/*.pdf
+data/raw/test-fixtures/

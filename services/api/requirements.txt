@@ -67,7 +67,9 @@ nbdime==4.0.4
 nbformat==5.10.4
 nest-asyncio==1.6.0
 notebook_shim==0.2.4
+numpy==2.5.1
 packaging==26.0
+pandas==3.0.3
 pandocfilters==1.5.1
 parso==0.8.6
 passlib==1.7.4

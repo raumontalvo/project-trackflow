@@ -1,0 +1,10 @@
+{
+  "devDependencies": {
+    "typescript": "^6.0.3"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "demo": "tsc && node dist/demo.js",
+    "browser-demo": "tsc -p tsconfig.browser.json"
+  }
+}

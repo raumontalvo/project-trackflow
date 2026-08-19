@@ -3,10 +3,6 @@
 from __future__ import annotations
 
 import re
-from typing import Any
-
-from langchain_core.runnables import RunnableConfig
-from langgraph.config import get_stream_writer
 
 from data.pipelines.rag import (
     DEFAULT_SCORE_THRESHOLD,
@@ -15,7 +11,12 @@ from data.pipelines.rag import (
     build_context,
     generate_answer,
     retrieve,
-    stream_answer,
+)
+from services.agent.authorization import authorize_tracking_number
+from services.agent.guardrails import (
+    enforce_country_policy,
+    evaluate_input,
+    validate_output,
 )
 from services.agent.state import AgentState
 from services.agent.tools import TicketLookupInput, lookup_ticket
@@ -26,46 +27,15 @@ TICKET_PATTERN = re.compile(
     re.IGNORECASE,
 )
 
-
-def _streaming_enabled(config: RunnableConfig | None) -> bool:
-    """
-    Return whether this graph invocation should emit token stream events.
-
-    The traditional HTTP /agent/query path does not enable this flag.
-    The WebSocket path enables it through LangGraph configurable values.
-    """
-    if not config:
-        return False
-
-    configurable = config.get("configurable", {})
-
-    return bool(configurable.get("stream_tokens", False))
+TRACKING_PATTERN = re.compile(
+    r"\b(?:tracking(?:\s+number)?|order)\s*#\s*([A-Za-z0-9-]+)\b"
+    r"|\btracking(?:\s+number)?\s+([A-Za-z0-9-]*\d[A-Za-z0-9-]*)\b"
+    r"|\border\s+([A-Za-z0-9-]*\d[A-Za-z0-9-]*)\b",
+    re.IGNORECASE,
+)
 
 
-def _write_token(
-    token: str,
-    config: RunnableConfig | None,
-) -> None:
-    """Emit a custom LangGraph token event when streaming is enabled."""
-    if not token:
-        return
-
-    if not _streaming_enabled(config):
-        return
-
-    writer = get_stream_writer()
-
-    writer(
-        {
-            "type": "token",
-            "token": token,
-        }
-    )
-
-
-def validate_question_node(
-    state: AgentState,
-) -> AgentState:
+def validate_question_node(state: AgentState) -> AgentState:
     """Validate and normalize the incoming question."""
     question = state.get("question", "").strip()
 
@@ -82,9 +52,103 @@ def validate_question_node(
     }
 
 
-def route_request_node(
-    state: AgentState,
-) -> AgentState:
+def guard_input_node(state: AgentState) -> AgentState:
+    """Apply deterministic scope, content, and anti-injection guardrails."""
+    decision = evaluate_input(state["question"])
+
+    return {
+        "guardrail_allowed": decision.allowed,
+        "guardrail_category": decision.category,
+        "guardrail_reason": decision.reason,
+        "guardrail_response": decision.response,
+        "answer": decision.response if not decision.allowed else None,
+    }
+
+
+def tracking_authorization_node(state: AgentState) -> AgentState:
+    """Authorize access to any tracking/order number mentioned by the user."""
+    question = state["question"]
+    match = TRACKING_PATTERN.search(question)
+
+    if not match:
+        return {
+            "tracking_number": None,
+            "tracking_authorized": None,
+            "tracking_authorization_reason": None,
+            "shipment_country": None,
+        }
+
+    tracking_number = next(
+        group for group in match.groups() if group is not None
+    )
+
+    authenticated_user_uuid = state.get("authenticated_user_uuid")
+
+    if not authenticated_user_uuid:
+        return {
+            "tracking_number": tracking_number,
+            "tracking_authorized": False,
+            "tracking_authorization_reason": "missing_authenticated_user",
+            "shipment_country": None,
+            "answer": (
+                "I can't verify access to that TrackFlow order or tracking "
+                "number. Please authenticate with the customer account that "
+                "owns the shipment."
+            ),
+        }
+
+    authorization = authorize_tracking_number(
+        tracking_number=tracking_number,
+        authenticated_user_uuid=authenticated_user_uuid,
+    )
+
+    if not authorization.authorized:
+        return {
+            "tracking_number": tracking_number,
+            "tracking_authorized": False,
+            "tracking_authorization_reason": authorization.reason,
+            "shipment_country": authorization.shipment_country,
+            "answer": (
+                "I can't provide information for that order or tracking "
+                "number because I can't verify that it belongs to your "
+                "authenticated TrackFlow account."
+            ),
+        }
+
+    return {
+        "tracking_number": tracking_number,
+        "tracking_authorized": True,
+        "tracking_authorization_reason": None,
+        "shipment_country": authorization.shipment_country,
+    }
+
+
+def country_policy_guard_node(state: AgentState) -> AgentState:
+    """Enforce the policy that belongs to the shipment's actual country."""
+    decision = enforce_country_policy(
+        question=state["question"],
+        shipment_country=state.get("shipment_country"),
+    )
+
+    return {
+        "shipment_country": (
+            decision.shipment_country
+            if decision.shipment_country is not None
+            else state.get("shipment_country")
+        ),
+        "requested_policy_country": decision.requested_country,
+        "country_policy_allowed": decision.allowed,
+        "country_policy_reason": decision.reason,
+        "country_policy_response": decision.response,
+        "answer": (
+            decision.response
+            if not decision.allowed
+            else state.get("answer")
+        ),
+    }
+
+
+def route_request_node(state: AgentState) -> AgentState:
     """Classify whether the request needs RAG, a ticket lookup, or both."""
     question = state["question"]
     match = TICKET_PATTERN.search(question)
@@ -120,9 +184,7 @@ def route_request_node(
     }
 
 
-def retrieve_context_node(
-    state: AgentState,
-) -> AgentState:
+def retrieve_context_node(state: AgentState) -> AgentState:
     """Retrieve and format approved TrackFlow knowledge-base context."""
     question = state["question"]
 
@@ -140,9 +202,7 @@ def retrieve_context_node(
     }
 
 
-async def ticket_lookup_node(
-    state: AgentState,
-) -> AgentState:
+async def ticket_lookup_node(state: AgentState) -> AgentState:
     """Query current ticket data through the TrackFlow MCP server."""
     incident_id = state.get("incident_id")
 
@@ -163,140 +223,53 @@ async def ticket_lookup_node(
     }
 
 
-def no_context_node(
-    state: AgentState,
-    config: RunnableConfig | None = None,
-) -> AgentState:
+def no_context_node(state: AgentState) -> AgentState:
     """Return the existing safe fallback when retrieval finds no context."""
-    _write_token(
-        NO_CONTEXT_ANSWER,
-        config,
-    )
-
     return {
         "answer": NO_CONTEXT_ANSWER,
     }
 
 
-async def _stream_generated_answer(
-    question: str,
-    context: str,
-) -> str:
-    """
-    Stream model output through LangGraph custom events.
-
-    The complete text is also returned so the graph state still contains
-    the final assistant answer after streaming finishes.
-    """
-    writer = get_stream_writer()
-    answer_parts: list[str] = []
-
-    async for token in stream_answer(
-        question,
-        context,
-    ):
-        if not token:
-            continue
-
-        answer_parts.append(token)
-
-        writer(
-            {
-                "type": "token",
-                "token": token,
-            }
-        )
-
-    answer = "".join(answer_parts).strip()
-
-    if not answer:
-        raise RuntimeError(
-            "The generation model returned an empty answer."
-        )
-
-    return answer
-
-
-async def generate_answer_node(
-    state: AgentState,
-    config: RunnableConfig | None = None,
-) -> AgentState:
-    """
-    Generate an answer from retrieved knowledge-base context.
-
-    HTTP calls preserve the original generate_answer() behavior.
-    WebSocket calls use the real streaming generation path.
-    """
+def generate_answer_node(state: AgentState) -> AgentState:
+    """Generate from context already produced by the retrieval node."""
     question = state["question"]
     context = state.get("context", "")
 
-    if _streaming_enabled(config):
-        answer = await _stream_generated_answer(
-            question,
-            context,
-        )
-    else:
-        answer = generate_answer(
-            question,
-            context,
-        )
+    answer = generate_answer(question, context)
 
     return {
         "answer": answer,
     }
 
 
-def generate_ticket_answer_node(
-    state: AgentState,
-    config: RunnableConfig | None = None,
-) -> AgentState:
+def generate_ticket_answer_node(state: AgentState) -> AgentState:
     """Generate a deterministic answer from live incident data."""
     ticket_result = state.get("ticket_result") or {}
     incident = ticket_result["incident"]
 
-    answer = (
-        f"Incident {incident['id']} is currently "
-        f"{incident['status'].replace('_', ' ')}. "
-        f"Title: {incident['title']}. "
-        f"Branch: {incident['branch']}."
-    )
-
-    _write_token(
-        answer,
-        config,
-    )
-
     return {
-        "answer": answer,
+        "answer": (
+            f"Incident {incident['id']} is currently "
+            f"{incident['status'].replace('_', ' ')}. "
+            f"Title: {incident['title']}. "
+            f"Branch: {incident['branch']}."
+        )
     }
 
 
-def ticket_fallback_node(
-    state: AgentState,
-    config: RunnableConfig | None = None,
-) -> AgentState:
+def ticket_fallback_node(state: AgentState) -> AgentState:
     """Return a safe deterministic answer when the incident tool fails."""
     ticket_result = state.get("ticket_result") or {}
 
-    answer = (
-        ticket_result.get("error")
-        or "I could not confirm the current incident status."
-    )
-
-    _write_token(
-        answer,
-        config,
-    )
-
     return {
-        "answer": answer,
+        "answer": (
+            ticket_result.get("error")
+            or "I could not confirm the current incident status."
+        )
     }
 
 
-async def generate_combined_answer_node(
-    state: AgentState,
-    config: RunnableConfig | None = None,
-) -> AgentState:
+def generate_combined_answer_node(state: AgentState) -> AgentState:
     """Answer using both live incident data and approved RAG context."""
     ticket_result = state.get("ticket_result") or {}
     incident = ticket_result["incident"]
@@ -315,25 +288,36 @@ async def generate_combined_answer_node(
         f"{context}"
     )
 
-    if _streaming_enabled(config):
-        answer = await _stream_generated_answer(
-            state["question"],
-            combined_context,
-        )
-    else:
-        answer = generate_answer(
-            state["question"],
-            combined_context,
-        )
+    answer = generate_answer(
+        state["question"],
+        combined_context,
+    )
 
     return {
         "answer": answer,
     }
 
 
-def route_after_validation(
-    state: AgentState,
-) -> str:
+def output_guard_node(state: AgentState) -> AgentState:
+    """Validate the final answer before exposing it to the user."""
+    decision = validate_output(state.get("answer"))
+
+    if decision.allowed:
+        return {
+            "output_guard_allowed": True,
+            "output_guard_failure_type": None,
+            "output_guard_reason": None,
+        }
+
+    return {
+        "output_guard_allowed": False,
+        "output_guard_failure_type": decision.failure_type,
+        "output_guard_reason": decision.reason,
+        "answer": decision.safe_response,
+    }
+
+
+def route_after_validation(state: AgentState) -> str:
     """Route invalid questions directly to the end."""
     if state.get("error"):
         return "invalid"
@@ -341,16 +325,39 @@ def route_after_validation(
     return "valid"
 
 
-def route_after_request(
-    state: AgentState,
-) -> str:
+def route_after_guard(state: AgentState) -> str:
+    """Route input-guard failures directly to the end."""
+    if not state.get("guardrail_allowed", True):
+        return "blocked"
+
+    return "allowed"
+
+
+def route_after_tracking_authorization(state: AgentState) -> str:
+    """Stop unauthorized tracking requests before RAG or tools execute."""
+    tracking_number = state.get("tracking_number")
+    tracking_authorized = state.get("tracking_authorized")
+
+    if tracking_number and tracking_authorized is False:
+        return "blocked"
+
+    return "allowed"
+
+
+def route_after_country_policy(state: AgentState) -> str:
+    """Stop country-policy override attempts before RAG or tools execute."""
+    if not state.get("country_policy_allowed", True):
+        return "blocked"
+
+    return "allowed"
+
+
+def route_after_request(state: AgentState) -> str:
     """Route the request to the appropriate capability."""
     return state.get("route", "rag")
 
 
-def route_after_retrieval(
-    state: AgentState,
-) -> str:
+def route_after_retrieval(state: AgentState) -> str:
     """Route based on retrieved context and requested capability."""
     if not state.get("context"):
         return "no_context"
@@ -361,13 +368,9 @@ def route_after_retrieval(
     return "context_found"
 
 
-def route_after_ticket_lookup(
-    state: AgentState,
-) -> str:
+def route_after_ticket_lookup(state: AgentState) -> str:
     """Route successful tool calls onward and failures to recovery."""
-    ticket_result: dict[str, Any] = (
-        state.get("ticket_result") or {}
-    )
+    ticket_result = state.get("ticket_result") or {}
 
     if not ticket_result.get("success"):
         return "failed"
@@ -376,3 +379,11 @@ def route_after_ticket_lookup(
         return "both"
 
     return "ticket"
+
+
+def route_after_output_guard(state: AgentState) -> str:
+    """Finish after output validation, whether allowed or safely replaced."""
+    if state.get("output_guard_allowed", True):
+        return "allowed"
+
+    return "blocked"

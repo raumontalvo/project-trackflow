@@ -2,6 +2,7 @@ import hashlib
 import os
 import secrets
 from datetime import datetime, timedelta, timezone
+from uuid import uuid4
 
 import resend
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -78,8 +79,22 @@ def login(form_data: OAuth2PasswordRequestForm = Depends()):
             headers={"WWW-Authenticate": "Bearer"},
         )
 
+    user_uuid = user.get("uuid")
+
+    if not user_uuid:
+        user_uuid = str(uuid4())
+        users_table.update(
+            {"uuid": user_uuid},
+            doc_ids=[user["id"]],
+        )
+
     token = create_access_token({"sub": str(user["id"])})
-    return {"access_token": token, "token_type": "bearer"}
+
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "user_uuid": user_uuid,
+    }
 
 
 @router.get("/me")
@@ -131,6 +146,7 @@ def reset_password(payload: ResetPasswordRequest):
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
     expires_at_raw = user.get("reset_token_expires_at")
+
     if not expires_at_raw:
         raise HTTPException(status_code=400, detail="Invalid or expired reset token")
 
