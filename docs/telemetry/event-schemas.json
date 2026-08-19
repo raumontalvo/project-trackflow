@@ -1,0 +1,187 @@
+{
+  "schemaVersion": "1.0.0",
+  "eventEnvelope": {
+    "eventId": "uuid",
+    "timestamp": "ISO-8601",
+    "sessionId": "string",
+    "userId": "TinyDB UUID",
+    "event_type": "entity_action",
+    "schemaVersion": "1.0.0",
+    "requestId": "uuid",
+    "properties": {}
+  },
+  "events": [
+    {
+      "event_type": "receiving_order_created",
+      "description": "A ReceivingOrder is successfully registered and increases SKU stock.",
+      "stream": false,
+      "containsPII": false,
+      "allowlist": [
+        "receiving_order_id",
+        "sku_id",
+        "sku_code",
+        "warehouse",
+        "client_id",
+        "quantity",
+        "carrier",
+        "created_by"
+      ],
+      "properties": {
+        "receiving_order_id": "string",
+        "sku_id": "string",
+        "sku_code": "string",
+        "warehouse": "los_angeles | zaragoza",
+        "client_id": "opaque string",
+        "quantity": "integer",
+        "carrier": "string",
+        "created_by": "TinyDB UUID"
+      }
+    },
+    {
+      "event_type": "dispatch_order_created",
+      "description": "A DispatchOrder is successfully registered and reduces SKU stock.",
+      "stream": true,
+      "containsPII": false,
+      "allowlist": [
+        "dispatch_order_id",
+        "sku_id",
+        "sku_code",
+        "warehouse",
+        "client_id",
+        "destination_country",
+        "quantity",
+        "carrier",
+        "created_by"
+      ],
+      "properties": {
+        "dispatch_order_id": "string",
+        "sku_id": "string",
+        "sku_code": "string",
+        "warehouse": "los_angeles | zaragoza",
+        "client_id": "opaque string",
+        "destination_country": "string",
+        "quantity": "integer",
+        "carrier": "string",
+        "created_by": "TinyDB UUID"
+      }
+    },
+    {
+      "event_type": "dispatch_order_failed",
+      "description": "A DispatchOrder is rejected because validation failed, such as insufficient stock or unknown SKU.",
+      "stream": true,
+      "containsPII": false,
+      "allowlist": [
+        "sku_id",
+        "sku_code",
+        "warehouse",
+        "client_id",
+        "destination_country",
+        "quantity",
+        "failure_reason",
+        "created_by",
+        "sla_sensitive"
+      ],
+      "properties": {
+        "sku_id": "string",
+        "sku_code": "string",
+        "warehouse": "los_angeles | zaragoza",
+        "client_id": "opaque string",
+        "destination_country": "string",
+        "quantity": "integer",
+        "failure_reason": "insufficient_stock | unknown_sku | invalid_quantity | unknown_client",
+        "created_by": "TinyDB UUID",
+        "sla_sensitive": "boolean"
+      }
+    },
+    {
+      "event_type": "stock_threshold_triggered",
+      "description": "A SKU reaches or falls below its minimum stock threshold after a DispatchOrder.",
+      "stream": true,
+      "containsPII": false,
+      "allowlist": [
+        "sku_id",
+        "sku_code",
+        "warehouse",
+        "client_id",
+        "current_stock",
+        "min_stock_threshold",
+        "triggering_dispatch_order_id"
+      ],
+      "properties": {
+        "sku_id": "string",
+        "sku_code": "string",
+        "warehouse": "los_angeles | zaragoza",
+        "client_id": "opaque string",
+        "current_stock": "integer",
+        "min_stock_threshold": "integer",
+        "triggering_dispatch_order_id": "string"
+      }
+    },
+    {
+      "event_type": "direct_stock_edit_rejected",
+      "description": "A request to modify SKU stock directly is rejected because stock can only change through ReceivingOrder or DispatchOrder.",
+      "stream": false,
+      "containsPII": false,
+      "allowlist": [
+        "sku_id",
+        "sku_code",
+        "warehouse",
+        "client_id",
+        "attempted_field",
+        "rejection_reason",
+        "created_by"
+      ],
+      "properties": {
+        "sku_id": "string",
+        "sku_code": "string",
+        "warehouse": "los_angeles | zaragoza",
+        "client_id": "opaque string",
+        "attempted_field": "current_stock",
+        "rejection_reason": "direct_stock_modification_not_allowed",
+        "created_by": "TinyDB UUID"
+      }
+    },
+    {
+      "event_type": "user_login_failed",
+      "description": "A warehouse operative or coordinator fails to authenticate.",
+      "stream": true,
+      "containsPII": false,
+      "allowlist": [
+        "failure_reason",
+        "warehouse",
+        "user_role",
+        "attempt_count",
+        "ip_hash"
+      ],
+      "properties": {
+        "failure_reason": "wrong_credentials | expired_session | locked_account",
+        "warehouse": "los_angeles | zaragoza | unknown",
+        "user_role": "operative | coordinator | unknown",
+        "attempt_count": "integer",
+        "ip_hash": "hashed string"
+      }
+    },
+    {
+      "event_type": "dispatch_form_abandoned",
+      "description": "A user starts but does not complete a DispatchOrder form.",
+      "stream": false,
+      "containsPII": false,
+      "allowlist": [
+        "warehouse",
+        "sku_id",
+        "client_id",
+        "abandoned_step",
+        "time_on_form_seconds",
+        "created_by"
+      ],
+      "properties": {
+        "warehouse": "los_angeles | zaragoza",
+        "sku_id": "string",
+        "client_id": "opaque string",
+        "abandoned_step": "sku_selection | quantity_entry | carrier_selection | final_submit",
+        "time_on_form_seconds": "integer",
+        "created_by": "TinyDB UUID"
+      }
+    }
+  ]
+}

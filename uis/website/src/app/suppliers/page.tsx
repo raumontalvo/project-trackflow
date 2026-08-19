@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
 type Supplier = {
   id: number;
@@ -29,12 +29,26 @@ const categories = [
   "cleaning_and_facilities",
 ];
 
+function getFriendlyErrorMessage(action: string) {
+  return `${action}. Please try again. If the problem continues, contact support.`;
+}
+
+async function safeJsonResponse(res: Response) {
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
 export default function SuppliersPage() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [country, setCountry] = useState("");
   const [category, setCategory] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [saving, setSaving] = useState(false);
 
   const [form, setForm] = useState({
     name: "",
@@ -62,27 +76,28 @@ export default function SuppliersPage() {
       const url = query ? `${API_URL}/suppliers?${query}` : `${API_URL}/suppliers`;
 
       const res = await fetch(url);
-      const data = await res.json();
+      const data = await safeJsonResponse(res);
 
-      if (!res.ok) {
-        throw new Error("Could not load suppliers.");
+      if (!res.ok || !Array.isArray(data)) {
+        throw new Error("SUPPLIER_LOAD_FAILED");
       }
 
       setSuppliers(data);
     } catch {
-      setError("Could not connect to the supplier API.");
+      setSuppliers([]);
+      setError(getFriendlyErrorMessage("We could not load suppliers"));
     } finally {
       setLoading(false);
     }
   }
 
-  useEffect(() => {
-    loadSuppliers();
-  }, [country, category]);
-
+  
+  
   async function createSupplier(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setSuccess("");
+    setSaving(true);
 
     const payload = {
       ...form,
@@ -93,33 +108,39 @@ export default function SuppliersPage() {
       notes: form.notes || null,
     };
 
-    const res = await fetch(`${API_URL}/suppliers`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(payload),
-    });
+    try {
+      const res = await fetch(`${API_URL}/suppliers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(payload),
+      });
 
-    if (!res.ok) {
-      const data = await res.json();
-      setError(JSON.stringify(data.detail));
-      return;
+      if (!res.ok) {
+        await safeJsonResponse(res);
+        throw new Error("SUPPLIER_CREATE_FAILED");
+      }
+
+      setForm({
+        name: "",
+        country: "USA",
+        categories: "carrier_last_mile",
+        rate_per_shipment: "",
+        currency: "USD",
+        status: "active",
+        service_zone: "",
+        contact_email: "",
+        notes: "",
+      });
+
+      setSuccess("Supplier created successfully.");
+      await loadSuppliers();
+    } catch {
+      setError(getFriendlyErrorMessage("We could not create this supplier"));
+    } finally {
+      setSaving(false);
     }
-
-    setForm({
-      name: "",
-      country: "USA",
-      categories: "carrier_last_mile",
-      rate_per_shipment: "",
-      currency: "USD",
-      status: "active",
-      service_zone: "",
-      contact_email: "",
-      notes: "",
-    });
-
-    loadSuppliers();
   }
 
   async function updateRate(id: number) {
@@ -127,45 +148,59 @@ export default function SuppliersPage() {
 
     if (!newRate) return;
 
-    const res = await fetch(`${API_URL}/suppliers/${id}/rate`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        rate_per_shipment: Number(newRate),
-      }),
-    });
+    setError("");
+    setSuccess("");
 
-    if (!res.ok) {
-      const data = await res.json();
-      setError(JSON.stringify(data.detail));
-      return;
+    try {
+      const res = await fetch(`${API_URL}/suppliers/${id}/rate`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          rate_per_shipment: Number(newRate),
+        }),
+      });
+
+      if (!res.ok) {
+        await safeJsonResponse(res);
+        throw new Error("SUPPLIER_RATE_UPDATE_FAILED");
+      }
+
+      setSuccess("Supplier rate updated successfully.");
+      await loadSuppliers();
+    } catch {
+      setError(getFriendlyErrorMessage("We could not update the supplier rate"));
     }
-
-    loadSuppliers();
   }
 
   async function toggleStatus(supplier: Supplier) {
     const newStatus = supplier.status === "active" ? "suspended" : "active";
 
-    const res = await fetch(`${API_URL}/suppliers/${supplier.id}/status`, {
-      method: "PATCH",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        status: newStatus,
-      }),
-    });
+    setError("");
+    setSuccess("");
 
-    if (!res.ok) {
-      const data = await res.json();
-      setError(JSON.stringify(data.detail));
-      return;
+    try {
+      const res = await fetch(`${API_URL}/suppliers/${supplier.id}/status`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          status: newStatus,
+        }),
+      });
+
+      if (!res.ok) {
+        await safeJsonResponse(res);
+        throw new Error("SUPPLIER_STATUS_UPDATE_FAILED");
+      }
+
+      setSuccess("Supplier status updated successfully.");
+      await loadSuppliers();
+    } catch {
+      setError(getFriendlyErrorMessage("We could not update the supplier status"));
     }
-
-    loadSuppliers();
   }
 
   return (
@@ -204,13 +239,26 @@ export default function SuppliersPage() {
               </option>
             ))}
           </select>
+
+          <button style={styles.secondaryButton} type="button" onClick={loadSuppliers}>
+            Retry
+          </button>
         </div>
       </section>
 
       <section style={styles.card}>
         <h2 style={styles.sectionTitle}>Register New Supplier</h2>
 
-        {error && <p style={styles.error}>{error}</p>}
+        {error && (
+          <div style={styles.errorBox}>
+            <p style={styles.error}>{error}</p>
+            <button style={styles.smallButtonAlt} type="button" onClick={loadSuppliers}>
+              Retry loading suppliers
+            </button>
+          </div>
+        )}
+
+        {success && <p style={styles.success}>{success}</p>}
 
         <form onSubmit={createSupplier} style={styles.form}>
           <input
@@ -296,8 +344,8 @@ export default function SuppliersPage() {
             onChange={(e) => setForm({ ...form, notes: e.target.value })}
           />
 
-          <button style={styles.primaryButton} type="submit">
-            Create Supplier
+          <button style={styles.primaryButton} type="submit" disabled={saving}>
+            {saving ? "Creating..." : "Create Supplier"}
           </button>
         </form>
       </section>
@@ -306,68 +354,76 @@ export default function SuppliersPage() {
         <div style={styles.tableHeader}>
           <h2 style={styles.sectionTitle}>Suppliers</h2>
           <p style={styles.count}>
-            {loading ? "Loading..." : `${suppliers.length} records`}
+            {loading ? "Loading suppliers..." : `${suppliers.length} records`}
           </p>
         </div>
 
-        <div style={styles.tableWrap}>
-          <table style={styles.table}>
-            <thead>
-              <tr>
-                <th style={styles.th}>Name</th>
-                <th style={styles.th}>Country</th>
-                <th style={styles.th}>Categories</th>
-                <th style={styles.th}>Rate</th>
-                <th style={styles.th}>Status</th>
-                <th style={styles.th}>Updated</th>
-                <th style={styles.th}>Actions</th>
-              </tr>
-            </thead>
+        {loading && <p style={styles.info}>Loading suppliers. Please wait...</p>}
 
-            <tbody>
-              {suppliers.map((supplier) => (
-                <tr key={supplier.id}>
-                  <td style={styles.td}>{supplier.name}</td>
-                  <td style={styles.td}>{supplier.country}</td>
-                  <td style={styles.td}>{supplier.categories.join(", ")}</td>
-                  <td style={styles.td}>
-                    {supplier.rate_per_shipment} {supplier.currency}
-                  </td>
-                  <td style={styles.td}>
-                    <span
-                      style={{
-                        ...styles.badge,
-                        background:
-                          supplier.status === "active" ? "#dcfce7" : "#fee2e2",
-                        color:
-                          supplier.status === "active" ? "#166534" : "#991b1b",
-                      }}
-                    >
-                      {supplier.status}
-                    </span>
-                  </td>
-                  <td style={styles.td}>
-                    {new Date(supplier.rate_updated_at).toLocaleString()}
-                  </td>
-                  <td style={styles.td}>
-                    <button
-                      style={styles.smallButton}
-                      onClick={() => updateRate(supplier.id)}
-                    >
-                      Update Rate
-                    </button>
-                    <button
-                      style={styles.smallButtonAlt}
-                      onClick={() => toggleStatus(supplier)}
-                    >
-                      {supplier.status === "active" ? "Suspend" : "Activate"}
-                    </button>
-                  </td>
+        {!loading && suppliers.length === 0 && !error && (
+          <p style={styles.info}>No suppliers found. Adjust the filters or create a supplier.</p>
+        )}
+
+        {!loading && suppliers.length > 0 && (
+          <div style={styles.tableWrap}>
+            <table style={styles.table}>
+              <thead>
+                <tr>
+                  <th style={styles.th}>Name</th>
+                  <th style={styles.th}>Country</th>
+                  <th style={styles.th}>Categories</th>
+                  <th style={styles.th}>Rate</th>
+                  <th style={styles.th}>Status</th>
+                  <th style={styles.th}>Updated</th>
+                  <th style={styles.th}>Actions</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+
+              <tbody>
+                {suppliers.map((supplier) => (
+                  <tr key={supplier.id}>
+                    <td style={styles.td}>{supplier.name}</td>
+                    <td style={styles.td}>{supplier.country}</td>
+                    <td style={styles.td}>{supplier.categories.join(", ")}</td>
+                    <td style={styles.td}>
+                      {supplier.rate_per_shipment} {supplier.currency}
+                    </td>
+                    <td style={styles.td}>
+                      <span
+                        style={{
+                          ...styles.badge,
+                          background:
+                            supplier.status === "active" ? "#dcfce7" : "#fee2e2",
+                          color:
+                            supplier.status === "active" ? "#166534" : "#991b1b",
+                        }}
+                      >
+                        {supplier.status}
+                      </span>
+                    </td>
+                    <td style={styles.td}>
+                      {new Date(supplier.rate_updated_at).toLocaleString()}
+                    </td>
+                    <td style={styles.td}>
+                      <button
+                        style={styles.smallButton}
+                        onClick={() => updateRate(supplier.id)}
+                      >
+                        Update Rate
+                      </button>
+                      <button
+                        style={styles.smallButtonAlt}
+                        onClick={() => toggleStatus(supplier)}
+                      >
+                        {supplier.status === "active" ? "Suspend" : "Activate"}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </section>
     </main>
   );
@@ -448,6 +504,15 @@ const styles: Record<string, React.CSSProperties> = {
     fontWeight: 700,
     cursor: "pointer",
   },
+  secondaryButton: {
+    padding: "10px 14px",
+    border: "none",
+    borderRadius: "10px",
+    background: "#475569",
+    color: "white",
+    fontWeight: 700,
+    cursor: "pointer",
+  },
   tableHeader: {
     display: "flex",
     justifyContent: "space-between",
@@ -498,8 +563,23 @@ const styles: Record<string, React.CSSProperties> = {
     color: "white",
     cursor: "pointer",
   },
+  errorBox: {
+    padding: "12px",
+    borderRadius: "10px",
+    background: "#fef2f2",
+    marginBottom: "12px",
+  },
   error: {
     color: "#b91c1c",
     fontWeight: 700,
+    marginTop: 0,
+  },
+  success: {
+    color: "#166534",
+    fontWeight: 700,
+  },
+  info: {
+    color: "#475569",
+    fontWeight: 600,
   },
 };
