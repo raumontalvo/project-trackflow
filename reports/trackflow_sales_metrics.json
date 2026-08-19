@@ -1,0 +1,12 @@
+{
+  "mse_eur_squared": 13748377032.886423,
+  "rmse_eur": 117253.47343633971,
+  "rmse_percentage_of_average_monthly_revenue": 9.025933771428422,
+  "psi": 9.313296918320034,
+  "normalized_gini": 0.6457727777842585,
+  "r2_score": 0.530307407393881,
+  "assignment_k2_note": "The assignment requests K2 Score but does not define it; standard R\u00b2 is reported instead.",
+  "average_test_monthly_revenue_eur": 1299073.0533333335,
+  "training_rows": 96,
+  "test_rows": 24
+}
