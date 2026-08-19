@@ -16,6 +16,10 @@ from fastapi import (
 from sqlmodel import Session, select
 
 from data.pipelines.rfp_intake.config import COUNTRY_TO_CURRENCY
+from data.pipelines.rfp_intake.approval_service import (
+    get_pending_approvals,
+    submit_approval_decision,
+)
 from data.pipelines.rfp_intake.graph import run_rfp_intake
 from data.pipelines.rfp_intake.persistence import (
     create_ticket,
@@ -28,6 +32,7 @@ from data.pipelines.rfp_intake.response_service import (
 )
 from services.api.database import engine
 from services.api.models import DepartmentSection, RFP, Ticket
+from services.api.schemas import ApprovalDecisionRequest
 
 
 router = APIRouter(
@@ -325,3 +330,89 @@ def get_rfp_ticket(
         response["summary"] = rfp.intake_summary
 
         return response
+
+
+@router.get("/{ticket_id}/approvals")
+def get_ticket_approvals(
+    ticket_id: str,
+) -> dict:
+    """
+    Return unresolved human approval interrupts for one RFP ticket.
+    """
+
+    with Session(engine) as session:
+        ticket = session.get(
+            Ticket,
+            ticket_id,
+        )
+
+        if ticket is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="RFP ticket not found.",
+            )
+
+    try:
+        pending = get_pending_approvals(
+            ticket_id
+        )
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=str(exc),
+        ) from exc
+
+    return {
+        "ticket_id": ticket_id,
+        "status": ticket.status,
+        "pending_approvals": pending,
+    }
+
+
+@router.post(
+    "/{ticket_id}/approvals/{interrupt_id}"
+)
+def decide_ticket_approval(
+    ticket_id: str,
+    interrupt_id: str,
+    decision: ApprovalDecisionRequest,
+) -> dict:
+    """
+    Resume exactly one persisted department approval branch.
+    """
+
+    with Session(engine) as session:
+        ticket = session.get(
+            Ticket,
+            ticket_id,
+        )
+
+        if ticket is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="RFP ticket not found.",
+            )
+
+        if ticket.status != "waiting_for_approval":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Ticket is not currently waiting "
+                    "for human approval."
+                ),
+            )
+
+    try:
+        return submit_approval_decision(
+            ticket_id=ticket_id,
+            interrupt_id=interrupt_id,
+            action=decision.action,
+            approver=decision.approver,
+            comment=decision.comment,
+        )
+
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc

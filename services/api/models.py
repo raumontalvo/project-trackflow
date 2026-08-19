@@ -1,8 +1,9 @@
-from datetime import datetime
+from datetime import date, datetime
 from typing import Any, Literal
+from uuid import uuid4
 
 from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
-from sqlalchemy import Column, DateTime, Index
+from sqlalchemy import Column, DateTime, Index, JSON, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field as SQLField
 from sqlmodel import Relationship, SQLModel
@@ -191,3 +192,111 @@ class DeadLetterTask(SQLModel, table=True):
     attempt: int
     error_message: str
     failed_at: datetime = SQLField(default_factory=datetime.utcnow)
+
+
+class RFP(SQLModel, table=True):
+    """Persisted metadata for a valid TrackFlow RFP."""
+
+    __tablename__ = "rfps"
+
+    rfp_id: str = SQLField(
+        default_factory=lambda: str(uuid4()),
+        primary_key=True,
+    )
+    client_name: str | None = None
+    client_country: str | None = None
+    services_requested: list[str] = SQLField(
+        default_factory=list,
+        sa_column=Column(JSON),
+    )
+    monthly_volume: int | None = None
+    deadline: date | None = None
+    budget_range: str | None = None
+    departments_needed: list[str] = SQLField(
+        default_factory=list,
+        sa_column=Column(JSON),
+    )
+    readability_metrics: dict = SQLField(
+        default_factory=dict,
+        sa_column=Column(JSON),
+    )
+    intake_summary: dict = SQLField(
+        default_factory=dict,
+        sa_column=Column(JSON),
+    )
+    created_at: datetime = SQLField(default_factory=datetime.utcnow)
+    updated_at: datetime = SQLField(default_factory=datetime.utcnow)
+
+
+class Ticket(SQLModel, table=True):
+    """Lifecycle record for an uploaded RFP document."""
+
+    __tablename__ = "rfp_tickets"
+
+    ticket_id: str = SQLField(
+        default_factory=lambda: str(uuid4()),
+        primary_key=True,
+    )
+    rfp_id: str | None = SQLField(
+        default=None,
+        foreign_key="rfps.rfp_id",
+    )
+    status: str = SQLField(default="analyzing", index=True)
+    raw_pdf_path: str
+    error_message: str | None = None
+    created_at: datetime = SQLField(default_factory=datetime.utcnow)
+    updated_at: datetime = SQLField(default_factory=datetime.utcnow)
+
+
+class DepartmentSection(SQLModel, table=True):
+    """Per-department RFP analysis and approval state."""
+
+    __tablename__ = "rfp_department_sections"
+
+    __table_args__ = (
+        UniqueConstraint(
+            "rfp_id",
+            "department_id",
+            name="uq_rfp_department",
+        ),
+    )
+
+    id: str = SQLField(
+        default_factory=lambda: str(uuid4()),
+        primary_key=True,
+    )
+    rfp_id: str = SQLField(foreign_key="rfps.rfp_id", index=True)
+    department_id: str = SQLField(index=True)
+    owner: str
+    key_aspects: dict = SQLField(
+        default_factory=dict,
+        sa_column=Column(JSON),
+    )
+    draft_content: str | None = None
+    evaluation_results: dict | None = SQLField(
+        default=None,
+        sa_column=Column(JSON),
+    )
+    approval_status: str | None = None
+    approver: str | None = None
+    approved_at: datetime | None = None
+    created_at: datetime = SQLField(default_factory=datetime.utcnow)
+    updated_at: datetime = SQLField(default_factory=datetime.utcnow)
+
+
+class FinalDocument(SQLModel, table=True):
+    """Final client-facing proposal after section approvals."""
+
+    __tablename__ = "rfp_final_documents"
+
+    ticket_id: str = SQLField(
+        foreign_key="rfp_tickets.ticket_id",
+        primary_key=True,
+    )
+    sections: dict = SQLField(
+        default_factory=dict,
+        sa_column=Column(JSON),
+    )
+    currency: str
+    document_content: str
+    generated_at: datetime = SQLField(default_factory=datetime.utcnow)

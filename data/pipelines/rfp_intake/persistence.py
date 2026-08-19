@@ -9,7 +9,7 @@ from sqlmodel import Session, select
 
 from data.pipelines.rfp_intake.config import DEPARTMENTS
 from services.api.database import engine
-from services.api.models import DepartmentSection, RFP, Ticket
+from services.api.models import DepartmentSection, FinalDocument, RFP, Ticket
 
 
 def get_ticket(ticket_id: str) -> Ticket | None:
@@ -203,7 +203,10 @@ def persist_generated_section(
     evaluation_result: dict[str, Any],
     iterations: int,
     needs_human_review: bool,
+    commitments: dict[str, Any] | None = None,
 ) -> DepartmentSection:
+    """Persist one generated/evaluated department proposal section."""
+
     with Session(engine) as session:
         section = session.get(
             DepartmentSection,
@@ -218,6 +221,7 @@ def persist_generated_section(
         section.draft_content = draft_content
         section.evaluation_results = {
             "evaluation": evaluation_result,
+            "commitments": commitments or {},
             "iterations": iterations,
             "needs_human_review": needs_human_review,
         }
@@ -238,3 +242,140 @@ def get_ticket(
             Ticket,
             ticket_id,
         )
+
+# ---------------------------------------------------------------------------
+# Milestone 9 Part 3 — approval persistence
+# ---------------------------------------------------------------------------
+
+def persist_approval_decision(
+    section_id: str,
+    *,
+    approval_status: str,
+    approver: str | None,
+    approved_at: datetime | None = None,
+) -> DepartmentSection:
+    """Persist the current human approval state for one department section."""
+
+    valid_statuses = {
+        "waiting_for_approval",
+        "approved",
+        "rejected",
+        "request_changes",
+    }
+
+    if approval_status not in valid_statuses:
+        raise ValueError(
+            f"Invalid approval status: {approval_status}"
+        )
+
+    with Session(engine) as session:
+        section = session.get(
+            DepartmentSection,
+            section_id,
+        )
+
+        if section is None:
+            raise ValueError(
+                f"RFP department section not found: {section_id}"
+            )
+
+        section.approval_status = approval_status
+        section.approver = approver
+        section.approved_at = (
+            approved_at
+            if approval_status == "approved"
+            else None
+        )
+        section.updated_at = datetime.utcnow()
+
+        session.add(section)
+        session.commit()
+        session.refresh(section)
+
+        return section
+
+
+def reset_section_for_revision(
+    section_id: str,
+) -> DepartmentSection:
+    """
+    Clear approval data before an affected section is regenerated.
+
+    The existing draft/evaluation remain until the revised Part 2 result
+    is persisted, preserving truthful state during regeneration.
+    """
+
+    with Session(engine) as session:
+        section = session.get(
+            DepartmentSection,
+            section_id,
+        )
+
+        if section is None:
+            raise ValueError(
+                f"RFP department section not found: {section_id}"
+            )
+
+        section.approval_status = "request_changes"
+        section.approver = None
+        section.approved_at = None
+        section.updated_at = datetime.utcnow()
+
+        session.add(section)
+        session.commit()
+        session.refresh(section)
+
+        return section
+
+
+
+def persist_final_document(
+    *,
+    ticket_id: str,
+    sections: dict[str, Any],
+    currency: str,
+    document_content: str,
+) -> FinalDocument:
+    """Persist the final approved TrackFlow proposal."""
+
+    with Session(engine) as session:
+        ticket = session.get(
+            Ticket,
+            ticket_id,
+        )
+
+        if ticket is None:
+            raise ValueError(
+                f"RFP ticket not found: {ticket_id}"
+            )
+
+        existing = session.get(
+            FinalDocument,
+            ticket_id,
+        )
+
+        if existing is None:
+            final_document = FinalDocument(
+                ticket_id=ticket_id,
+                sections=sections,
+                currency=currency,
+                document_content=document_content,
+            )
+        else:
+            final_document = existing
+            final_document.sections = sections
+            final_document.currency = currency
+            final_document.document_content = document_content
+            final_document.generated_at = datetime.utcnow()
+
+        session.add(final_document)
+
+        ticket.status = "done"
+        ticket.error_message = None
+        ticket.updated_at = datetime.utcnow()
+
+        session.add(ticket)
+        session.commit()
+        session.refresh(final_document)
+
+        return final_document

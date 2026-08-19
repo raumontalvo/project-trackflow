@@ -1,9 +1,14 @@
+"""Part 2 response-generation service and Part 3 handoff."""
+
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor
 
 from sqlmodel import Session, select
 
+from data.pipelines.rfp_intake.approval_service import (
+    start_ticket_approval,
+)
 from data.pipelines.rfp_intake.persistence import (
     persist_generated_section,
     update_ticket_status,
@@ -22,6 +27,13 @@ from services.api.models import (
 def generate_ticket_response(
     ticket_id: str,
 ) -> dict:
+    """
+    Generate and evaluate every active department section.
+
+    Successful Part 2 completion continues directly into the persisted
+    Part 3 human-approval workflow using the same ticket.
+    """
+
     update_ticket_status(
         ticket_id,
         "drafting",
@@ -85,6 +97,11 @@ def generate_ticket_response(
             for section in sections
         ]
 
+    if not section_inputs:
+        raise ValueError(
+            "Accepted RFP has no department sections."
+        )
+
     update_ticket_status(
         ticket_id,
         "under_evaluation",
@@ -106,6 +123,7 @@ def generate_ticket_response(
             evaluation_result=result["evaluation_result"],
             iterations=result["iterations"],
             needs_human_review=result["needs_human_review"],
+            commitments=result.get("commitments"),
         )
 
         return result
@@ -130,19 +148,27 @@ def generate_ticket_response(
         for result in results
     )
 
-    final_status = (
-        "needs_human_review"
-        if needs_human_review
-        else "under_evaluation"
-    )
+    if needs_human_review:
+        update_ticket_status(
+            ticket_id,
+            "needs_human_review",
+        )
 
-    update_ticket_status(
-        ticket_id,
-        final_status,
+        return {
+            "ticket_id": ticket_id,
+            "status": "needs_human_review",
+            "sections": results,
+        }
+
+    # Part 2 passed for every active department.
+    # Continue the SAME ticket directly into Part 3.
+    approval_result = start_ticket_approval(
+        ticket_id
     )
 
     return {
         "ticket_id": ticket_id,
-        "status": final_status,
+        "status": "waiting_for_approval",
         "sections": results,
+        "approval_result": approval_result,
     }

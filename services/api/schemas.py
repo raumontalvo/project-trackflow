@@ -283,3 +283,20 @@ class RFPIntakeResultResponse(BaseModel):
     )
 
     summary: IntakeSummary | None = None
+
+
+class ApprovalDecisionRequest(BaseModel):
+    """Human decision for one pending department approval."""
+
+    action: Literal[
+        "approve",
+        "reject",
+        "request_changes",
+    ]
+
+    approver: str = Field(
+        ...,
+        min_length=1,
+    )
+
+    comment: str | None = None
