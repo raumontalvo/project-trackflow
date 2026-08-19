@@ -1,12 +1,105 @@
 {
-  "mse_eur_squared": 13748377032.886423,
-  "rmse_eur": 117253.47343633971,
+  "mae_eur": 93074.32576166785,
+  "mse_eur_squared": 13748377032.88642,
+  "rmse_eur": 117253.4734363397,
   "rmse_percentage_of_average_monthly_revenue": 9.025933771428422,
   "psi": 9.313296918320034,
   "normalized_gini": 0.6457727777842585,
-  "r2_score": 0.530307407393881,
+  "r2_score": 0.5303074073938812,
   "assignment_k2_note": "The assignment requests K2 Score but does not define it; standard R\u00b2 is reported instead.",
   "average_test_monthly_revenue_eur": 1299073.0533333335,
+  "average_training_monthly_revenue_eur": 975377.9239583332,
   "training_rows": 96,
-  "test_rows": 24
+  "test_rows": 24,
+  "cross_validation": {
+    "n_splits": 5,
+    "folds": [
+      {
+        "fold": 1,
+        "training_rows": 16,
+        "validation_rows": 16,
+        "training_start_index": 0,
+        "training_end_index": 15,
+        "validation_start_index": 16,
+        "validation_end_index": 31,
+        "training_mae_eur": 19432.2168674988,
+        "validation_mae_eur": 29751.32219500006,
+        "training_rmse_eur": 25280.735012826073,
+        "validation_rmse_eur": 42387.56973287034
+      },
+      {
+        "fold": 2,
+        "training_rows": 32,
+        "validation_rows": 16,
+        "training_start_index": 0,
+        "training_end_index": 31,
+        "validation_start_index": 32,
+        "validation_end_index": 47,
+        "training_mae_eur": 13892.041886250245,
+        "validation_mae_eur": 74803.26984749999,
+        "training_rmse_eur": 17541.56890847414,
+        "validation_rmse_eur": 92243.51976322432
+      },
+      {
+        "fold": 3,
+        "training_rows": 48,
+        "validation_rows": 16,
+        "training_start_index": 0,
+        "training_end_index": 47,
+        "validation_start_index": 48,
+        "validation_end_index": 63,
+        "training_mae_eur": 14074.277326666199,
+        "validation_mae_eur": 52668.61352249823,
+        "training_rmse_eur": 18075.366942000328,
+        "validation_rmse_eur": 61972.70102518542
+      },
+      {
+        "fold": 4,
+        "training_rows": 64,
+        "validation_rows": 16,
+        "training_start_index": 0,
+        "training_end_index": 63,
+        "validation_start_index": 64,
+        "validation_end_index": 79,
+        "training_mae_eur": 13754.990210937778,
+        "validation_mae_eur": 68975.15500750608,
+        "training_rmse_eur": 16963.0604464268,
+        "validation_rmse_eur": 79563.44679660283
+      },
+      {
+        "fold": 5,
+        "training_rows": 80,
+        "validation_rows": 16,
+        "training_start_index": 0,
+        "training_end_index": 79,
+        "validation_start_index": 80,
+        "validation_end_index": 95,
+        "training_mae_eur": 15075.499920750139,
+        "validation_mae_eur": 104359.8254850017,
+        "training_rmse_eur": 18944.134239950232,
+        "validation_rmse_eur": 119814.28450597062
+      }
+    ],
+    "summary": {
+      "training_mae_mean_eur": 15245.805242420634,
+      "training_mae_std_eur": 2397.0152553319185,
+      "validation_mae_mean_eur": 66111.6372115012,
+      "validation_mae_std_eur": 27610.937652742938,
+      "training_rmse_mean_eur": 19360.973109935516,
+      "training_rmse_std_eur": 3388.596156212363,
+      "validation_rmse_mean_eur": 79196.30436477071,
+      "validation_rmse_std_eur": 29460.653383669385
+    }
+  },
+  "fit_diagnosis": {
+    "diagnosis": "moderate overfitting with unstable validation performance",
+    "explanation": "Training RMSE remains much lower than validation RMSE across the expanding chronological folds. Validation RMSE is more than 4.1 times training RMSE, and its variation between folds is substantial. This indicates that the unrestricted Random Forest is fitting historical detail that does not generalize reliably to later months.",
+    "recommendation": "Regularize the Random Forest by changing max_depth from None to 8 and min_samples_leaf from 1 to 3. Then rerun the identical five-fold TimeSeriesSplit and only accept the change if mean validation RMSE and its standard deviation decrease.",
+    "training_rmse_percentage_of_average_revenue": 1.9849714284452666,
+    "validation_rmse_percentage_of_average_revenue": 8.119550629500804,
+    "rmse_gap_eur": 59835.3312548352,
+    "rmse_gap_percentage_of_average_revenue": 6.134579201055536,
+    "validation_to_training_rmse_ratio": 4.090512595367914,
+    "validation_instability_ratio": 0.3719953048310991
+  }
 }
