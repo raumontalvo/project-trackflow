@@ -122,6 +122,17 @@ services:
     networks:
       - company_network
 
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.3
+    container_name: trackflow-keycloak
+    command: start-dev
+    environment:
+      KC_BOOTSTRAP_ADMIN_USERNAME: admin
+      KC_BOOTSTRAP_ADMIN_PASSWORD: admin
+    ports:
+      - "9000:8080"
+    restart: unless-stopped
+
 volumes:
   task_data:
   qdrant_storage:
